@@ -442,16 +442,7 @@ section { min-width: 0; }
   line-height: 1.8;
 }
 
-.ticket__dims {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-
-/* 维度刻度：6px 高的刻度条（本卷 4 个维度，全部可见） */
-.dim { min-width: 0; }
+/* 维度标签 / 说明（结果页第 2 段复用；原票面刻度条已被雷达图取代） */
 .dim__label {
   display: block;
   font-family: var(--font-mono);
@@ -466,28 +457,6 @@ section { min-width: 0; }
   color: var(--ink-soft);
   font-size: 12px;
   line-height: 1.5;
-}
-.dim__scale {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 38px;
-  gap: 8px;
-  align-items: center;
-  margin-top: 4px;
-}
-.dim__bar {
-  height: 6px;
-  background: var(--line);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.dim__fill { height: 100%; width: 0; background: var(--primary); }
-.dim__value {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.4;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  color: var(--ink-soft);
 }
 
 .ticket__stamp {
@@ -519,18 +488,24 @@ section { min-width: 0; }
   opacity: .8;
   transition: border-color 220ms linear;
 }
-/* §5.2 #11 印章落下：scale 1.55→1 + rotate -15→-8 + opacity →.94，双环 220ms 转朱砂 */
+/* §5.2 #11 印章落下：scale 1.55→1 + rotate -15→-8 走 600ms 回弹，
+   opacity 单走一条 600ms 线性（回弹缓动会让不透明度冲过 .94 再回落，看着像闪）；
+   双环 220ms 转朱砂 */
 .ticket__stamp.is-stamped {
   border-color: var(--accent);
   color: var(--accent);
   opacity: .94;
   transition: border-color 220ms linear, color 220ms linear;
-  animation: stamp-drop 320ms var(--ease-back) both;
+  animation: stamp-drop 600ms var(--ease-back) both, stamp-fade 600ms linear both;
 }
 .ticket__stamp.is-stamped::before { border-color: var(--accent); }
 @keyframes stamp-drop {
-  from { opacity: 0; transform: rotate(-15deg) scale(1.55); }
-  to { opacity: .94; transform: rotate(-8deg) scale(1); }
+  from { transform: rotate(-15deg) scale(1.55); }
+  to { transform: rotate(-8deg) scale(1); }
+}
+@keyframes stamp-fade {
+  from { opacity: 0; }
+  to { opacity: .94; }
 }
 .ticket__stamp:empty { display: none; }
 
@@ -561,13 +536,26 @@ section { min-width: 0; }
   margin-top: -4.5px;
   background: var(--accent);
   border-radius: 2px;
-  /* §5.2 #10 闸板 ∓72°，480ms */
-  transition: transform 480ms var(--ease-out);
+  /* §5.2 #10 闸板 ∓72°：480ms 半秒就开完（注意力还在标题上，等于没有），改 700ms。
+     用 @keyframes 分三段推进（0 → -34° → -62° → -72°），任何帧率下都能采到中间角度，
+     不会出现「0 度直接跳 72 度」。 */
 }
 .gate__panel--l { left: 16px; transform-origin: 0 50%; }
 .gate__panel--r { right: 16px; transform-origin: 100% 50%; }
-.gate.is-open .gate__panel--l { transform: rotateY(-72deg); }
-.gate.is-open .gate__panel--r { transform: rotateY(72deg); }
+.gate.is-open .gate__panel--l { animation: gate-open-l 700ms cubic-bezier(.22, .68, .16, 1) both; }
+.gate.is-open .gate__panel--r { animation: gate-open-r 700ms cubic-bezier(.22, .68, .16, 1) both; }
+@keyframes gate-open-l {
+  0%   { transform: rotateY(0deg); }
+  30%  { transform: rotateY(-34deg); }
+  65%  { transform: rotateY(-62deg); }
+  100% { transform: rotateY(-72deg); }
+}
+@keyframes gate-open-r {
+  0%   { transform: rotateY(0deg); }
+  30%  { transform: rotateY(34deg); }
+  65%  { transform: rotateY(62deg); }
+  100% { transform: rotateY(72deg); }
+}
 .gate__light {
   position: absolute;
   left: 50%; top: 12px;
@@ -587,9 +575,30 @@ section { min-width: 0; }
   border-radius: 2px 2px 4px 4px;
   box-shadow: 0 2px 0 rgba(23, 22, 20, .12);
 }
-.gate.is-open .gate__light {
+/* 通行灯：关态/开闸中保持朱砂色，闸板开到位（is-passed）才切绿灯 —— 灯色就是「放行」信号 */
+.gate.is-passed .gate__light {
   background: var(--ok);
   box-shadow: 0 0 0 2px rgba(127, 191, 154, .22);
+}
+/* 通行：整体向前 3px 再回弹，给开闸一个落点 */
+.gate.is-passed { animation: gate-pass 420ms var(--ease-out) both; }
+@keyframes gate-pass {
+  0%   { transform: translateY(0); }
+  42%  { transform: translateY(-3px); }
+  100% { transform: translateY(0); }
+}
+
+/* 减动效终态（JS 判到 prefers-reduced-motion 就挂 .is-snap）：
+   动画会盖掉普通声明，所以这里必须 !important；灯色也要掐掉过渡——没帧的环境里
+   240ms 的颜色过渡会一直停在起始色（朱砂），看起来就是「灯没放行」。
+   样式只在 .is-snap 下生效，用户改回「允许动效」时 JS 摘掉类即恢复原样。 */
+.gate.is-snap { animation: none !important; }
+.gate.is-snap .gate__panel--l { animation: none !important; transform: rotateY(-72deg) !important; }
+.gate.is-snap .gate__panel--r { animation: none !important; transform: rotateY(72deg) !important; }
+.gate.is-snap .gate__light {
+  transition-property: none !important;   /* 颜色过渡也不等（无帧时过渡会停在起始色） */
+  background: var(--ok) !important;
+  box-shadow: 0 0 0 2px rgba(127, 191, 154, .22) !important;
 }
 
 /* 结果区 §4.4：全宽 640，最小高 148，虚线边框 */
@@ -683,6 +692,8 @@ section { min-width: 0; }
   align-items: start;
 }
 
+/* 图鉴卡：整卡是一个原生按钮 → 打开 #city-modal（原生 <dialog>），不再行内展开。
+   按钮内只用 span/img 等 phrasing 内容，HTML 合法，Enter / Space 天然可用。 */
 .city-card {
   min-width: 0;
   background: var(--paper-hi);
@@ -690,40 +701,28 @@ section { min-width: 0; }
   border-top: 3px solid var(--card-color, var(--primary));
   border-radius: var(--radius);
   overflow: hidden;
-  perspective: 900px;          /* 图鉴卡翻面透视 */
 }
 
-.city-card > summary {
+.city-card__open {
   display: block;
-  list-style: none;
-  cursor: pointer;
+  width: 100%;
+  margin: 0;
   padding: 0 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
-.city-card > summary::-webkit-details-marker { display: none; }
-.city-card > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.city-card[open] > summary {
-  background: rgba(16, 54, 46, .04);
-}
-/* §5.2 #13 图鉴卡翻面：卡背以左边缘为轴 rotateY(-88deg → 0) 展平，560ms（≥480ms）；
-   正面同步轻微回压，读作"把卡片翻开"。reduced-motion 由全局 1ms 兜底。 */
-.city-card[open] > summary { animation: atlas-front 560ms var(--ease-out) both; }
-.city-card[open] > .city-detail {
-  transform-origin: 0 50%;
-  backface-visibility: hidden;
-  animation: atlas-flip 560ms var(--ease-out) both;
-}
-@keyframes atlas-front {
-  0% { transform: rotateY(0); }
-  30% { transform: rotateY(-5deg); }
-  100% { transform: rotateY(0); }
-}
-@keyframes atlas-flip {
-  0% { transform: rotateY(-88deg); opacity: 0; }
-  60% { opacity: 1; }
-  100% { transform: rotateY(0); opacity: 1; }
-}
+.city-card__open:hover { background: rgba(16, 54, 46, .04); }
+.city-card__open:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 
 .city-card__media {
+  display: block;
   aspect-ratio: 4 / 3;
   background: var(--card-color, var(--primary));
   overflow: hidden;
@@ -749,8 +748,8 @@ section { min-width: 0; }
   text-align: center;
 }
 
-.city-card__body { padding: 10px 12px 0; min-width: 0; }
-.city-card__name { font-size: 17px; line-height: 1.3; font-weight: 700; margin: 0 0 4px; }
+.city-card__body { display: block; padding: 10px 12px 0; min-width: 0; }
+.city-card__name { display: block; font-size: 17px; line-height: 1.3; font-weight: 700; margin: 0 0 4px; }
 .city-card__badge {
   display: inline-block;
   margin: 0 0 6px;
@@ -763,41 +762,33 @@ section { min-width: 0; }
   letter-spacing: .12em;
   color: var(--ink-soft);
 }
-.city-card__line { font-size: 14px; line-height: 1.6; margin: 0 0 4px; }
-.city-card__when { font-size: 13px; line-height: 1.6; color: var(--ink-soft); }
+.city-card__line { display: block; font-size: 14px; line-height: 1.6; margin: 0 0 4px; }
+.city-card__when { display: block; font-size: 13px; line-height: 1.6; color: var(--ink-soft); }
 
-.city-detail {
-  display: grid;
+/* 图鉴区提示：朱砂小圆点呼吸 + trivia.json 的 hint 文案（reduced-motion 由全局兜底压成静态） */
+.atlas__hint {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 12px;
-  border-top: 1px dashed var(--line);
-  font-size: 14px;
-  line-height: 1.75;
-}
-.city-detail ul { margin: 0; padding-left: 18px; }
-.city-detail li { margin: 0 0 2px; }
-.city-detail__tagline {
+  margin: 0 0 10px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.4;
-  letter-spacing: .06em;
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: .04em;
   color: var(--accent);
 }
-.city-detail__contrast {
-  padding-left: 10px;
-  border-left: 2px solid var(--accent);
-  color: var(--ink-soft);
+.atlas__hint-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: hint-pulse 2400ms var(--ease-std) infinite;
 }
-.city-detail__attribution {
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--ink-soft);
-  border-top: 1px dashed var(--line);
-  padding-top: 8px;
-  overflow-wrap: anywhere;
+@keyframes hint-pulse {
+  0%, 100% { transform: scale(1); opacity: .9; }
+  50% { transform: scale(1.5); opacity: .35; }
 }
-/* 375 下 badge / when 收进展开面板（768+ 由 summary 三行全显，这里隐藏） */
-.city-detail__meta { display: none; }
 
 /* ---------------- 首页其余区块 ---------------- */
 
@@ -904,7 +895,7 @@ section { min-width: 0; }
   gap: 12px;
   transform-origin: 50% 100%;   /* §5.2 #4 从底边翻起 */
 }
-.qcard.is-flipping { animation: qcard-flip 420ms var(--ease-std) both; }
+.qcard.is-flipping { animation: qcard-flip 420ms var(--ease-std) forwards; }
 @keyframes qcard-flip {
   from { transform: rotateX(-90deg); opacity: 0; }
   to { transform: rotateX(0); opacity: 1; }
@@ -1247,16 +1238,11 @@ dialog p { margin: 0 0 10px; font-size: 15px; line-height: 1.75; }
   .city-card__name { font-size: 16px; }
   .city-card__line { font-size: 13px; }
   .city-card__when { font-size: 12px; }
-  /* 375 图鉴卡只留 line：badge / when 收进展开面板（11px 三行两列会糊） */
-  .city-card__body > .city-card__badge,
+  /* 375 卡片只留 name + badge + line；when 进弹窗（两列 11px 三行会糊） */
   .city-card__body > .city-card__when { display: none; }
-  .city-detail__meta {
-    display: block;
-    border-top: 1px dashed var(--line);
-    padding-top: 8px;
-  }
-  .city-detail__meta .city-card__badge { margin-bottom: 6px; }
-  .city-detail__meta .city-card__when { display: block; font-size: 12px; color: var(--ink-soft); }
+  .atlas__hint { font-size: 11px; }
+  /* 吸底按钮占满底部一条：首页 footer 留等量底部空间，避免遮住免责声明 */
+  .sticky-cta ~ .foot { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
   .gate { width: 150px; height: 100px; }
   .gate__panel { width: 44px; }
   .gate-screen { padding: 14px 14px 15px; margin-bottom: 14px; }
@@ -1342,14 +1328,480 @@ a:not(.btn):focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 
 /* §7 无障碍：减少动态时全部压到 0.001s，状态切换与信息不丢 */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *, *::before, *::after, ::backdrop {
     transition-duration: .001s !important;
     animation-duration: .001s !important;
     animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
   }
   .is-anim { will-change: auto; }
+  /* 闸机在减弱动效下不走动画，直接落在终态：闸板就位、绿灯亮、无任何中间角度 */
+  .gate.is-open .gate__panel--l { animation: none; transform: rotateY(-72deg); }
+  .gate.is-open .gate__panel--r { animation: none; transform: rotateY(72deg); }
+  .gate.is-passed { animation: none; }
 }
+
+/* ================= 结果页 v2（CITY-07e）：雷达 + 四段 + 动画四拍 ================= */
+
+/* 拍 1：票背压边亮一下（6px 主色压边上的琥珀色闪 600ms） */
+.ticket__edge {
+  position: absolute;
+  top: 0; left: 0; right: var(--stub);
+  height: var(--edge);
+  border-radius: var(--radius) 0 0 0;
+  background: var(--amber);
+  opacity: 0;
+  pointer-events: none;
+}
+.ticket__edge.is-lit { animation: edge-glow 600ms var(--ease-out) both; }
+@keyframes edge-glow {
+  0% { opacity: 0; }
+  22% { opacity: .72; }
+  100% { opacity: 0; }
+}
+
+/* 1 你长这样：雷达卡 */
+.radar-card {
+  width: 100%;
+  max-width: 640px;
+  margin: 16px auto 0;
+  padding: 14px 14px 16px;
+  background: var(--paper-hi);
+  border: 1px solid var(--line);
+  border-top: var(--edge) solid var(--primary);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 0 rgba(23, 22, 20, .10), 0 26px 44px -34px rgba(23, 22, 20, .5);
+}
+.radar-card__hd {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.4;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.radar-wrap { display: grid; gap: 10px; align-items: center; min-width: 0; }
+.radar { display: block; width: 100%; height: auto; overflow: visible; }
+.radar__ring { fill: none; stroke: var(--line); stroke-width: 1; }
+.radar__ring--outer { stroke-width: 1.5; }
+.radar__axis { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 3; }
+.radar__axis-label { font-size: 13px; font-weight: 700; fill: var(--ink); letter-spacing: .04em; }
+.radar__axis-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  fill: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+/* 实心填充 = 你的剖面；虚线描边 = 该城 prototype */
+.radar__you {
+  fill: var(--primary);
+  fill-opacity: 0;
+  stroke: var(--primary);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  transition: fill-opacity 400ms linear;
+}
+.radar__city {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.6;
+  stroke-dasharray: 5 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.radar__you.is-drawing,
+.radar__city.is-drawing {
+  animation: radar-draw 900ms var(--ease-std) forwards;
+  fill-opacity: 0;                 /* 描线期间不填充 */
+}
+/* 描线走 @keyframes：动画引擎按时间轴插值，不依赖「两次样式提交之间值变更」 */
+@keyframes radar-draw {
+  from { stroke-dashoffset: var(--len); }
+  to { stroke-dashoffset: 0; }
+}
+.radar__you.is-drawn { fill-opacity: .16; animation: none; }
+.radar__city.is-drawn { animation: none; }
+.radar__dots { opacity: 0; transition: opacity 300ms linear; }
+.radar.is-on .radar__dots { opacity: 1; }
+.radar__dot { fill: var(--paper-hi); stroke: var(--primary); stroke-width: 1.6; }
+
+.radar-conf { min-width: 0; }
+.radar-conf__k {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.radar-conf__v {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  margin: 2px 0 4px;
+  font-family: var(--font-mono);
+  font-size: 40px;
+  line-height: 1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.radar-conf__unit { font-size: 19px; }
+.radar-conf__line { margin: 0; font-size: 14px; line-height: 1.7; }
+.radar-legend {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.radar-legend li { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.legend-swatch { width: 18px; height: 10px; border-radius: 1px; flex: 0 0 auto; }
+.legend-swatch--you { background: rgba(16, 54, 46, .16); border: 2px solid var(--primary); }
+.legend-swatch--city { height: 0; border-top: 2px dashed var(--accent); }
+
+/* 2 / 3 / 4 段：同一张纸上的分析区 */
+.res-sec {
+  width: 100%;
+  max-width: 640px;
+  margin: 22px auto 0;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: rgba(246, 240, 228, .55);
+  font-size: 16px;
+  min-width: 0;
+}
+.res-sec__title {
+  margin: 0 0 2px;
+  font-size: 17px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: .01em;
+  text-wrap: balance;
+}
+.res-sec__meta {
+  margin: 0 0 12px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.4;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* 四维逐条 */
+.dim-reads { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.dim-read {
+  min-width: 0;
+  padding: 0 0 14px;
+  border-bottom: 1px dashed var(--line);
+}
+.dim-read:last-child { padding-bottom: 0; border-bottom: 0; }
+.dim-read__hd {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+.dim-read__val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+.dim-read__val b { font-size: 22px; font-weight: 700; color: var(--primary); }
+.dim-read__unit { font-size: 10px; }
+.dim-read__hint {
+  margin: 6px 0 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: .12em;
+  color: var(--accent);
+}
+.dim-read__text { margin: 0; font-size: 15px; line-height: 1.75; }
+
+/* 日常 */
+.daily__lead { margin: 0 0 12px; font-size: 17px; line-height: 1.75; font-weight: 700; }
+.daily__body { margin: 0 0 12px; font-size: 15px; line-height: 1.8; }
+.daily__body:last-of-type { margin-bottom: 0; }
+.daily__beat {
+  margin: 0 0 12px;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--accent);
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.8;
+}
+.daily__go {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+/* 反差面 + 另外两座城 */
+.contrast__quote {
+  margin: 0 0 12px;
+  padding: 8px 0 8px 12px;
+  border-left: 3px solid var(--primary);
+  font-size: 16px;
+  line-height: 1.8;
+}
+.alt { margin: 0 0 8px; font-size: 15px; line-height: 1.8; }
+.alt--least { color: var(--ink-soft); }
+.res-sec .mixed { margin-top: 14px; }
+
+/* 拍 4：段落逐条上浮（stagger 90ms、每条 400ms，进视口才开始） */
+.res-sec[data-reveal]:not(.is-shown) .rise-item { opacity: 0; }
+.res-sec.is-shown .rise-item {
+  animation: rise-in 400ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 767px) {
+  .radar-card { padding: 12px 12px 14px; }
+  .radar-conf__v { font-size: 36px; }
+  .res-sec { padding: 14px; }
+  .res-sec__title { font-size: 16px; }
+  .dim__desc { font-size: 13px; }
+  .daily__lead { font-size: 16px; }
+}
+
+@media (min-width: 768px) {
+  /* 雷达独占一行、同频度挪到图下方横排：卡片整幅宽度都给雷达（直径≈280px），
+     右侧不再留一大片空白；轴端标签也因此离图形远了 16 个单位 */
+  .radar-wrap { grid-template-columns: minmax(0, 1fr); gap: 6px; justify-items: center; }
+  .radar { max-width: 560px; }
+  .radar-conf {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+    grid-template-areas: "k line" "v line" "lg lg";
+    align-items: center;
+    column-gap: 24px;
+  }
+  .radar-conf__k { grid-area: k; }
+  .radar-conf__v { grid-area: v; margin: 0; }
+  .radar-conf__line { grid-area: line; }
+  .radar-legend { grid-area: lg; margin-top: 12px; }
+  .radar-card { padding: 16px 18px 18px; }
+  .radar-conf__v { font-size: 52px; }
+  .radar-conf__unit { font-size: 22px; }
+  .radar-conf__line { font-size: 15px; }
+  .res-sec { padding: 18px 20px 20px; font-size: 17px; }
+  .res-sec__title { font-size: 19px; }
+  .dim-reads { gap: 16px; }
+  .dim-read__text,
+  .daily__body,
+  .daily__beat { font-size: 16px; }
+  .daily__lead { font-size: 19px; }
+}
+
+/* ---------------- CITY-07d：图鉴弹窗（原生 <dialog>）+ 吸底「开始」 ---------------- */
+
+/* 弹窗打开时锁页面滚动；关闭后由 JS 把滚动位置放回原处 */
+html.is-modal-locked,
+html.is-modal-locked body { overflow: hidden; }
+
+.city-modal {
+  width: 92vw;
+  max-width: 92vw;
+  max-height: 88vh;
+  max-height: 88dvh;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-hi);
+  color: var(--ink);
+  overflow: hidden;
+}
+.city-modal::backdrop {
+  background: rgba(23, 22, 20, .55);
+  animation: modal-fade 240ms linear both;
+}
+.city-modal__panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+}
+.city-modal[open] .city-modal__panel { animation: modal-in 240ms var(--ease-out) both; }
+
+/* 只动 transform / opacity；reduced-motion 下由 §7 全局规则压到 0.001s */
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.city-modal__media {
+  flex: 0 0 auto;
+  aspect-ratio: 16 / 10;
+  background: var(--card-color, var(--primary));
+  overflow: hidden;
+}
+.city-modal__media img { width: 100%; height: 100%; object-fit: cover; }
+.city-modal__media.is-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--paper-hi);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .08em;
+}
+
+.city-modal__body {
+  min-height: 0;
+  padding: 14px 16px 18px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-size: 14px;
+  line-height: 1.75;
+}
+.city-modal__hd { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+.city-modal__name { font-size: 20px; line-height: 1.3; font-weight: 700; }
+.city-modal__hd .city-card__badge { margin: 0; }
+.city-modal__line { margin: 0 0 4px; font-size: 15px; line-height: 1.6; }
+.city-modal__when { margin: 0 0 12px; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+
+.city-modal__trivia {
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: rgba(179, 58, 37, .05);
+}
+.city-modal__trivia-label {
+  display: block;
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.city-modal__trivia p { margin: 0; font-size: 14px; line-height: 1.8; }
+
+.city-modal__credit {
+  margin: 12px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.city-modal__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgba(250, 246, 236, .94);
+  color: var(--ink);
+  font: 22px/1 var(--font-sans);
+  cursor: pointer;
+}
+.city-modal__close:hover { background: var(--paper); }
+.city-modal__close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 吸底 / 吸角「开始」：滚过 hero 后出现，回顶淡出；弹窗打开时 JS 收回 */
+.sticky-cta {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  border: 0;
+  border-top: 1px solid var(--primary-hi);
+  border-radius: 0;
+  font-size: 15px;
+  line-height: 1.2;
+  text-decoration: none;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(100%);
+  pointer-events: none;
+  transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out),
+              visibility 0s linear 240ms;
+}
+.sticky-cta.is-on {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out),
+              visibility 0s linear 0s;
+}
+
+/* 上面的基础规则压在断点之后，桌面档在这里覆盖（同特异性、后出现者生效） */
+@media (min-width: 768px) {
+  /* ≥768：吸右下角圆角按钮，不再全宽 */
+  .sticky-cta {
+    left: auto;
+    right: 24px;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    width: auto;
+    min-width: 128px;
+    padding: 13px 26px;
+    border: 1px solid var(--primary-hi);
+    border-radius: 999px;
+    font-size: 16px;
+    transform: translateY(14px);
+  }
+  .sticky-cta.is-on { transform: none; }
+  /* ≥768：弹窗最大 720 宽，正文内距放宽 */
+  .city-modal {
+    width: min(720px, 92vw);
+    max-width: min(720px, 92vw);
+    max-height: 86vh;
+    max-height: 86dvh;
+  }
+  .city-modal__body { padding: 18px 22px 22px; font-size: 15px; }
+  .city-modal__name { font-size: 22px; }
+  .city-modal__line { font-size: 16px; }
+  /* 吸角按钮压住右下：footer 留出按钮高度 + 间距 */
+  .sticky-cta ~ .foot { padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px)); }
+}
+
+
 
 </style>
 </head>
@@ -1392,201 +1844,27 @@ a:not(.btn):focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
   </article>
 
   <section class="atlas" data-block="atlas" id="atlas">
-    <div class="copy-block" data-copy="atlas"><h2 class="atlas__title">城市图鉴</h2><p class="atlas__desc">16 座城市，每张卡一句话、一个最好去的时段。</p><p class="atlas__guide">往下翻，看完全部 16 座，再决定先点哪一张。</p></div>
-    <div class="atlas__grid" id="atlas-grid"><details class="city-card" data-city="shanghai" style="--card-color: #a0b8c4"><summary><div class="city-card__media"><img src="assets/files/a153f6d45e_shanghai-bund-pudong-640.jpg" alt="上海 · 外滩望陆家嘴天际线" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">上海</h3><span class="city-card__badge">快城</span><p class="city-card__line">晾衣杆下面，走过穿西装的人</p><p class="city-card__when">工作日上午八点，换乘通道里</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">快城</span><p class="city-card__when">工作日上午八点，换乘通道里</p></div><p class="city-detail__tagline">走得快，也留得住旧门牌</p>
-<p>弄堂口晾着衣服，拐个弯就是玻璃幕墙；电梯里没人说话，脚步都很急。</p>
-<p>七点四十，地铁进站，门一开你就迈出去，早饭在哪买、出地铁走哪边都算好了。人再多也不影响你走，顺着人流反而走得顺，被人撞一下也不会回头。包里还有一张折过很多次的收据，是你舍不得扔的小东西，可你不会为它多停一分钟。</p>
-<ul><li>能在人堆里把事一路办完</li><li>把一堆乱事先排成顺序</li><li>记住别人不在意的小讲究</li></ul>
-<ul><li>没人催的下午，能量容易空转</li><li>和自己待一整天，这一格常空着</li></ul>
-<p>约好七点吃饭，对方六点五十说在路上，你已经在楼下站了二十分钟，语气就冷了半度。你真正想说的是：「我不怕等，我怕等到最后只有我一个人在赶。」</p>
-<p>最容易出活的是身边有人在走动的地方：节奏快、事情有先后、反馈当场就能给到，你会被推着往前走。全程安静、一个人对着屏幕的半天，反而要花很久才进状态。</p>
-<blockquote class="city-detail__contrast">你说自己不耐烦，可等红灯时只有你在看倒计时。</blockquote>
-<p>晚上八点半，写字楼玻璃门一开，风灌进来那一下。</p>
-<p>早上七点去菜市场，先站在门口看十分钟再进去。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：Ermell｜CC0（公有领域/CC0）｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="shenzhen" style="--card-color: #5f93b8"><summary><div class="city-card__media"><img src="assets/files/ab15116c95_shenzhen-skyline-640.jpg" alt="深圳 · 福田高楼群" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">深圳</h3><span class="city-card__badge">新城</span><p class="city-card__line">箱子拉链，到了这儿就没开过</p><p class="city-card__when">秋天下午四点，书店二楼靠窗</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">新城</span><p class="city-card__when">秋天下午四点，书店二楼靠窗</p></div><p class="city-detail__tagline">所有路口都朝前，没人问你从哪来</p>
-<p>地铁里全是年轻的脸，楼是新的，路是直的；夜里十一点，写字楼还亮着一半。</p>
-<p>柜子里只留一个箱子，换地方时拎起来就能走，拉链都没怎么拉开过。早上出门时间算得很准，一路都是直路，不用绕。人挤的地方你不烦，反倒觉得有劲。手机里没有几张去年的照片，你更关心下周要做什么、跟谁一起做，别人不打听你的来历，你也乐得不解释。</p>
-<ul><li>把没做过的事先接下来</li><li>在陌生人群里迅速搭上话</li><li>把新东西很快变成自己的</li></ul>
-<ul><li>回头整理旧事，这一格总是空着</li><li>慢下来等一个结果，能量容易散</li></ul>
-<p>对方翻出三年前的聊天记录，你只记得上个月的事，两个人就卡在那儿，谁也没往下说，气氛慢慢凉下来。你可以直接讲：「以前的事改不了了，我更想知道以后怎么过。」</p>
-<p>在目标清楚、所有人朝一个方向的地方，你出活最快：会议短、结论快、当天就能动手。反过来，需要反复论证历史原因、照顾各种旧关系的场合，你会耗到没电。</p>
-<blockquote class="city-detail__contrast">手机里没一张旧照片，搬家却留着第一把钥匙。</blockquote>
-<p>晚上十一点，电梯一层层停，门开时还有人讲方案。</p>
-<p>下午四点去新开的书店，坐二楼靠窗那个位置。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：Fumikas Sagisavas｜CC0（公有领域/CC0）｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="chongqing" style="--card-color: #68453b"><summary><div class="city-card__media"><img src="assets/files/f365da25e5_chongqing-hongyadong-640.jpg" alt="重庆 · 洪崖洞夜景" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">重庆</h3><span class="city-card__badge">坡城</span><p class="city-card__line">导航说左转，脚下是台阶</p><p class="city-card__when">傍晚六点，喇叭喊着收摊</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">坡城</span><p class="city-card__when">傍晚六点，喇叭喊着收摊</p></div><p class="city-detail__tagline">楼上是马路，楼下还是马路</p>
-<p>坡和台阶把城市折起来，导航常常失灵；火锅店里说话全靠喊。</p>
-<p>从一楼进去，出来是七楼，你从来没觉得哪里不对，也不回头数台阶。人多的地方你自在，声音再大也不影响你说自己的事。下雨天台阶打滑，你踩上去也不减速。相册里存着很多「这里以前是什么样」的照片，可你从不停下来细看，边走边拍，拍完就走。</p>
-<ul><li>在乱的地方找到自己的路</li><li>人多时把气氛带起来</li><li>把老地方讲出新意思</li></ul>
-<ul><li>按部就班整理，能量容易空转</li><li>把一件事慢慢说完，这一格常空</li></ul>
-<p>两个人一起出门，你走前面拐了个弯，回头人已经不在了，路上也没再说过话；对方觉得你不管人，你觉得是对方跟不上。可以直说：「我拐弯前喊你一声，你别自己生闷气。」</p>
-<p>适合在事情随时会变的地方干活：现场谈、当场改、出了问题马上补。流程写得太细、一步不能动的场合，你会坐不住；给你一块能自己发挥的地，你能顶住一整天的乱。</p>
-<blockquote class="city-detail__contrast">你说自己不怕乱，出门却总要带充电宝。</blockquote>
-<p>傍晚六点，坡上的喇叭喊着收摊，声音从上往下滚。</p>
-<p>六点上天桥，站着看车拐弯，看十分钟就下来。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：Yumeto｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="dongguan" style="--card-color: #9e9380"><summary><div class="city-card__media"><img src="assets/files/9e8a7f2072_dongguan-yulan-theatre-640.jpg" alt="东莞 · 玉兰大剧院前广场" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">东莞</h3><span class="city-card__badge">轮班</span><p class="city-card__line">夜市收摊时，早班的人来了</p><p class="city-card__when">早上换班那半小时，街上最多人</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">轮班</span><p class="city-card__when">早上换班那半小时，街上最多人</p></div><p class="city-detail__tagline">没有市中心，每条街都在上班</p>
-<p>厂房、出租屋、夜市摊挨着长；路口没有统一的样子，凌晨还有人换班。</p>
-<p>交接班还有十分钟，你已经把下一班要用的东西摆好，手套也戴上了。街上什么样你不太在乎，能办成事就行。住的地方换过几处，行李一直是一个箱子。路怎么长你就怎么走，不用记住哪条是主街。人多你不觉得吵，那种各忙各的热闹让你踏实。</p>
-<ul><li>在没人安排时自己开工</li><li>和不同来路的人搭上话</li><li>把手上的活当天做完</li></ul>
-<ul><li>留一件舍不得的东西，常空着</li><li>慢下来讲一段过去，能量容易空转</li></ul>
-<p>对方约你周末出去，你说「看排班再说」，两次之后对方就不问了，只在你休息那天发一句在吗。你可以早点讲：「我这周只有半天，剩下半天想睡觉，不是不想见你。」</p>
-<p>在事情明确、当天就要结果的地方最顺：接手、干完、交接，中间不用开会。需要长时间筹备、反复打磨细节的活，你会烦；把任务拆成今天能做完的块，你就一直有力气。</p>
-<blockquote class="city-detail__contrast">嘴上说随叫随到，手机常年开着静音。</blockquote>
-<p>凌晨一点，厂门口的灯还亮着，有人刚换完班走出来。</p>
-<p>早上去街边吃一碗粉，坐着看半小时人流。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：X-SHLIED｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="beijing" style="--card-color: #6e7382"><summary><div class="city-card__media"><img src="assets/files/0a400e8605_beijing-cbd-jingshan-640.jpg" alt="北京 · 景山望 CBD 天际线" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">北京</h3><span class="city-card__badge">宽城</span><p class="city-card__line">越宽的街，越适合一个人走</p><p class="city-card__when">秋天下午，胡同里有人骑车经过</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">宽城</span><p class="city-card__when">秋天下午，胡同里有人骑车经过</p></div><p class="city-detail__tagline">路很宽，人和人之间也很宽</p>
-<p>环路一圈圈套着老城，胡同里安静，街上说话客气；走很久才遇见一个人。</p>
-<p>车厢连接处那小块地方，你一站就是四十分钟，谁也不碰着谁。一天排得很满，通勤那段路反倒像留白。周末你会挑一条没走过的街走到底，走完再决定要不要吃饭。你愿意为一堵旧墙多绕半条街，却不愿为一场饭局多坐一小时。</p>
-<ul><li>把长线的事情一直推下去</li><li>一个人待很久也不掉状态</li><li>认出别人忽略的老东西</li></ul>
-<ul><li>临时起意的热闹，能量容易空转</li><li>被人需要的时刻，这一格常空着</li></ul>
-<p>对方说「你什么事都自己定」，你听着像被指责，可你只是习惯想清楚再开口，也懒得解释，别人就以为你冷淡。可以直接讲：「我想一起去，但我想先知道去哪、几点回。」</p>
-<p>适合方向清楚、能长时间不被打断的活：关上门推一整天，晚上把结论摆出来。需要随时响应、总被打断的场合，你耗得很快；给你一段没人找的时间，你能把别人推不动的推完。</p>
-<blockquote class="city-detail__contrast">说饭局太长的你，走的时候还站在门口聊。</blockquote>
-<p>晚上九点，胡同里自行车铃响一声，又静下来。</p>
-<p>早上去胡同口吃碗豆腐脑，绕着墙根走一圈。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：Gary Todd from Xinzheng, China｜CC0（公有领域/CC0）｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="hefei" style="--card-color: #89a5c9"><summary><div class="city-card__media"><img src="assets/files/e412776243_hefei-swan-lake-640.jpg" alt="合肥 · 天鹅湖畔天际线" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">合肥</h3><span class="city-card__badge">直线</span><p class="city-card__line">商场还挂着招租，路先修好了</p><p class="city-card__when">晚上十点，新区主路只剩路灯</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">直线</span><p class="city-card__when">晚上十点，新区主路只剩路灯</p></div><p class="city-detail__tagline">新修的路，笔直得有点空</p>
-<p>新区路宽车少，绿化带比行人多；写字楼亮到很晚，商场里还挂着招租。</p>
-<p>下班那趟车整节车厢常只坐你一个，扶手一路都没人握。地铁空、街也空，你反倒走得快。你不太留旧东西，换了地方就把之前那套放下。空着的地方你不慌，正好把手机里攒的事一件件办掉。一天结束得晚，但你从不在路上磨时间。</p>
-<ul><li>从空地上把事搭起来</li><li>一个人推进一整个项目</li><li>把习惯在三个月里换掉</li></ul>
-<ul><li>跟人慢慢熟起来，能量容易空转</li><li>在旧事上多待一待，这一格常空</li></ul>
-<p>对方希望你多讲讲今天怎么样，你觉得没什么可说的，就回一句「还行」；对方越想靠近，你越退半步。可以试着说：「我不是不想讲，是我得有人问得具体一点。」</p>
-<p>在有明确目标、协作人数少的地方最有效率：三五个人、一间会议室、当天出结果。人一多、会一长，你就开始看表；把范围缩小、把结论提前定好，你能连着干很久。</p>
-<blockquote class="city-detail__contrast">说没计划的人，日程表已经排到下个月。</blockquote>
-<p>晚上十点，路灯一盏盏亮过去，车很少，风声清楚。</p>
-<p>傍晚去新区那条主路走一遍，从这头走到那头。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：Kuroiotoko｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="lanzhou" style="--card-color: #bc997e"><summary><div class="city-card__media"><img src="assets/files/b4d345f2b4_lanzhou-zhongshan-bridge-640.jpg" alt="兰州 · 中山桥与黄河" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">兰州</h3><span class="city-card__badge">沿河</span><p class="city-card__line">桥下风大，面要趁热吃</p><p class="city-card__when">早上七点，桥下风声最大</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">沿河</span><p class="city-card__when">早上七点，桥下风声最大</p></div><p class="city-detail__tagline">城市被拉成一条线，跟着河走</p>
-<p>两山夹着一条河，城区顺着河谷铺开；早上吃完面就走，桥下风声很大。</p>
-<p>口袋里的公交卡磨得发白，边角都软了，你还在用，也没想过换。出城只有那么几个方向，你也习惯沿着一条路一直往前，不拐弯。早上那碗面吃完就走，不坐着聊。你对旧东西有感情，桥、墙、老楼，你都记得它们在哪儿，但也只是路过时多看一眼，看完继续走。</p>
-<ul><li>沿着一条线把事做到底</li><li>一个人赶路不觉得闷</li><li>记住一条街的旧样子</li></ul>
-<ul><li>停下来和人闲坐，能量容易空转</li><li>把心里的事说出口，这一格常空</li></ul>
-<p>对方想晚上一起吃饭慢慢聊，你说「吃完我还得回去」，话很直，对方听着像被推开，饭桌就冷了下来。可以换个说法：「我不是不想聊，我是想早点回去，明天一起吃早饭。」</p>
-<p>一条线走到底的活最适合你：接手、埋头、当天出结果，中间不需要人陪。需要频繁碰头、边聊边定的场合，你会想赶紧结束；把目标和期限写清楚交给你，你能一个人推很远。</p>
-<blockquote class="city-detail__contrast">说自己不爱讲话，问路能问三分钟。</blockquote>
-<p>早上七点，面馆的热气糊住玻璃，勺子碰碗响。</p>
-<p>早上七点半去吃一碗面，加个蛋，十分钟吃完。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：kenner116｜许可：CC BY 2.0｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="yinchuan" style="--card-color: #5293d6"><summary><div class="city-card__media"><img src="assets/files/04ce2790a9_yinchuan-jinfeng-skyline-640.jpg" alt="银川 · 金凤区天际线" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">银川</h3><span class="city-card__badge">天低</span><p class="city-card__line">整条路上，只有你等灯</p><p class="city-card__when">夏天傍晚，路上遇不到几个人</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">天低</span><p class="city-card__when">夏天傍晚，路上遇不到几个人</p></div><p class="city-detail__tagline">路很直，天很低，人不多</p>
-<p>马路宽得能并排走好几队人，湖和沙都在城边；太阳落得慢，街上安安静静。</p>
-<p>钥匙、手机、一张卡，兜里就这三样，出门不用回头看一眼。路口等灯的时候，前后常常只有你一个。一天的事排得紧，但从头到尾都是自己一个人办，不用协调谁。太阳落得慢，你也不急着回家。旧的招牌你看见了不会特意记，换了新的，你很快就习惯。</p>
-<ul><li>在空地方自己安排一整天</li><li>把事干得又快又干净</li><li>换环境不用缓冲期</li></ul>
-<ul><li>跟人深聊到半夜，能量容易空转</li><li>为一件事反复回头，这一格常空</li></ul>
-<p>对方发来一长段话，你回了两行就去做别的事，隔了半天才想起没回完，对方以为你在生气。你可以先说清楚：「我没不高兴，我只是话少，你别拿字数猜我。」</p>
-<p>人少、路清、目标单一的地方最适合你：早上把一天排好，然后就一直往前推。需要不停商量、协调各方意见的场合，你会烦；把决定权交给你、只留一个结果要交，你的速度很快。</p>
-<blockquote class="city-detail__contrast">嘴上说不合群，聚餐你却先到。</blockquote>
-<p>傍晚七点，太阳压得很低，湖边的风一阵一阵。</p>
-<p>傍晚沿着那条宽路往城外走，走到看见湖为止。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：xiquinhosilva｜许可：CC BY 2.0｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="suzhou" style="--card-color: #39392e"><summary><div class="city-card__media"><img src="assets/files/034e71bd2f_suzhou-jinji-lake-640.jpg" alt="苏州 · 金鸡湖畔天际线" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">苏州</h3><span class="city-card__badge">窄巷</span><p class="city-card__line">巷子窄到，两个人都要让</p><p class="city-card__when">下雨的下午，河贴着墙根走</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">窄巷</span><p class="city-card__when">下雨的下午，河贴着墙根走</p></div><p class="city-detail__tagline">慢一点，才走得到园子深处</p>
-<p>巷子窄，河在墙根下走；评弹从窗里飘出来，老人坐在门口剥豆子。</p>
-<p>巷口的石阶被踩得发亮，你每次路过都要在上面站一会儿，才接着往巷子深处走。巷子窄、路是正的，你走进去一般不会走错。你对旧东西有耐心，一张旧桌子、一块旧砖，你能看上半天，看不完也没关系；一天没办几件事，你也不急。</p>
-<ul><li>在慢里把一件小事做细</li><li>人多的地方待一天不累</li><li>认出老东西的好处</li></ul>
-<ul><li>抢在别人前面出手，能量容易空转</li><li>把话说得很直，这一格常空着</li></ul>
-<p>对方说话很冲，你不接，过两天才用一句轻的话提起来，对方以为你早就不在意了，下一次也就不提了。可以直接说：「那天那句话我记住了，我只是不想当场吵。」</p>
-<p>在有秩序、节奏不快、有人的地方最舒服：一件事改几遍也不烦，细节一层层抠下来。要当场拍板、一路往前冲的场合，你会卡住；给你时间和安静的角落，你能交出很稳的东西。</p>
-<blockquote class="city-detail__contrast">说自己慢，出门却一回都没迟到。</blockquote>
-<p>下午三点，评弹从窗户里飘出来，河在墙根下响。</p>
-<p>下午去老巷子里走一条，走到河边就坐下。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：King of Hearts｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="kunming" style="--card-color: #3b444b"><summary><div class="city-card__media"><img src="assets/files/feef60911e_kunming-skyline-sunset-640.jpg" alt="昆明 · 城市天际线夕照" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">昆明</h3><span class="city-card__badge">出太阳</span><p class="city-card__line">花摆在门口，比招牌显眼</p><p class="city-card__when">冬天中午，茶馆门口晒得到太阳</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">出太阳</span><p class="city-card__when">冬天中午，茶馆门口晒得到太阳</p></div><p class="city-detail__tagline">太阳出来了，事情可以晚点说</p>
-<p>街上花比招牌多，茶馆能坐一下午；新楼底下还卖着烧饵块，说话都慢。</p>
-<p>上午十点，街边的小店才陆续拉开卷帘门，茶壶刚坐上炉子。太阳一出来，很多事都可以推到下午再说。楼是新的、路是直的，你不太在意这里以前是什么样，也不太留旧东西。急事来了你也先坐下再说。别人急你不急，事情最后也都办成了。</p>
-<ul><li>让紧绷的气氛松下来</li><li>在人堆里把事情说圆</li><li>不着急也把活干完</li></ul>
-<ul><li>把进度往前赶一赶，能量容易空转</li><li>为旧事难过一场，这一格常空</li></ul>
-<p>对方问「到底什么时候能定」，你回「快了」，这话说到第三次，对方就不问了，自己先去把事定了。可以具体一点：「我今晚八点前给你答复，没给就打电话催我。」</p>
-<p>在节奏松、身边有人的地方最顺手：边晒太阳边把事聊开，人一多你反而思路活。需要卡死时间、全程盯表的场合，你会做得很别扭；把时间放宽、留出聊天余量，你的产出反而稳。</p>
-<blockquote class="city-detail__contrast">说佛系的人，外卖超时就开始看手机。</blockquote>
-<p>傍晚四点，太阳斜进茶馆，杯子放在桌上轻轻一响。</p>
-<p>下午三点找一家茶馆坐下，点一杯，坐满一小时。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：FRED｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="chengdu" style="--card-color: #5e8dac"><summary><div class="city-card__media"><img src="assets/files/c17d346548_chengdu-skyline-snow-640.jpg" alt="成都 · 雪山下的城市天际线" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">成都</h3><span class="city-card__badge">慢城</span><p class="city-card__line">急事坐下来，也得等茶泡开</p><p class="city-card__when">秋天下午三点，院子里刚开局</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">慢城</span><p class="city-card__when">秋天下午三点，院子里刚开局</p></div><p class="city-detail__tagline">茶泡开了，急事也变慢了</p>
-<p>竹椅摆到街边，麻将声从院子里传出来；巷子拐来拐去，屋檐还是旧的。</p>
-<p>盖碗里的茶续到第三道，你才把手机倒扣回桌上，谁也不催谁。路没有一条是直的，你走熟了就不看导航。坐满的院子、摆到街边的桌子，你觉得那才是正常的声音。旧屋檐、旧门牌你会记得，但不挂在嘴上；一天走不远，话倒说了不少。</p>
-<ul><li>把一群人拢在一张桌上</li><li>在慢里等出一个好结果</li><li>记得住旧地方的老样子</li></ul>
-<ul><li>把截止日期当真，能量容易空转</li><li>一个人待一整天，这一格常空</li></ul>
-<p>对方说好七点到，八点还没来，你也不催，只是把菜先动了；等人坐下，你已经没什么想说的。这句话当时就该讲出来：「我不生气，但你迟到的时候，我会觉得自己不重要。」</p>
-<p>在有人的地方、节奏自己定的时候最出活：一张桌子、几个人、边说边做，聊到一半事情就成了。只看进度的场合，你会拖；给你一点松的时间和人，你能把难推的事推起来。</p>
-<blockquote class="city-detail__contrast">嘴上随遇而安，改行程时一句句问清楚。</blockquote>
-<p>傍晚六点，院子里麻将牌倒下来，哗啦一声。</p>
-<p>下午去巷子里找一家茶馆，坐到天黑再走。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：FISU｜许可：CC BY 3.0｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="nanning" style="--card-color: #909eb1"><summary><div class="city-card__media"><img src="assets/files/d3469cf366_nanning-qingxiu-view-640.jpg" alt="南宁 · 青秀山望城区" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">南宁</h3><span class="city-card__badge">夜市</span><p class="city-card__line">天黑了，这条街才开始营业</p><p class="city-card__when">夏天晚上九点，摊子刚支好</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">夜市</span><p class="city-card__when">夏天晚上九点，摊子刚支好</p></div><p class="city-detail__tagline">夜里才是一天的开始</p>
-<p>电动车流在树下穿，夜市一直摆到半夜；楼是新的，街是弯的。</p>
-<p>晚上九点，楼下的摊子才刚支起来，你把椅子往外挪了挪。街上人多、车多、声音杂，你不觉得吵，还愿意在人堆里慢慢骑着走。路是弯的，你也习惯拐着走。新的楼、新的店你进去得很快，旧东西不太留，前一天的事也很少再想，也不太回头。</p>
-<ul><li>把夜晚过成一整天</li><li>在热闹里把关系维持住</li><li>临时起意也能办成事</li></ul>
-<ul><li>早上的事按时办掉，能量容易空转</li><li>把旧账翻清楚，这一格常空着</li></ul>
-<p>对方早上发消息，你到晚上才回，对方觉得被晾着，几次之后就不发了。可以提前打个招呼：「我白天基本不看手机，晚上八点以后我都在，有事那时候说。」</p>
-<p>天黑之后你反而清醒：晚上开会、夜里改稿、边吃边聊，效率比白天高。上午被按在桌前、要求准点的场合，你很难进状态；把重要的事排到傍晚，你能一口气做完。</p>
-<blockquote class="city-detail__contrast">说自己是夜猫子，闹钟却设了三个。</blockquote>
-<p>晚上十一点，电动车从树下穿过，铃声一串。</p>
-<p>晚上九点去夜市走一趟，从这头吃到那头。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：EditQ｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="yangzhou" style="--card-color: #b0c9f7"><summary><div class="city-card__media"><img src="assets/files/a17b11b12c_yangzhou-five-pavilion-640.jpg" alt="扬州 · 瘦西湖五亭桥" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">扬州</h3><span class="city-card__badge">早茶</span><p class="city-card__line">早上一壶茶，能坐掉半个上午</p><p class="city-card__when">春天早上，老茶馆刚开门</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">早茶</span><p class="city-card__when">春天早上，老茶馆刚开门</p></div><p class="city-detail__tagline">一条街走完，刚好一壶茶</p>
-<p>老城方正，巷子安静；早上喝茶，晚上泡澡，路上人不多，说话都轻。</p>
-<p>街口那家茶社的椅子一直摆到路边，你走完一条街正好坐下，一壶茶还没凉。路是正的，你走起来心里有数，不用问人。你对旧东西有耐性，老墙、老门、老字，你能站在那儿看很久。一天只办一件事，你也不觉得亏，也不觉得那是浪费。</p>
-<ul><li>一个人把日子过得很稳</li><li>把一件旧事照顾到底</li><li>在安静里想清楚再动</li></ul>
-<ul><li>被人群推着往前走，能量容易空转</li><li>把火气发出来，这一格常空着</li></ul>
-<p>对方嗓门一大，你就不说话了，事后也不太提，对方以为这事过去了，你也当它过去了，谁也不提。可以试着说：「你刚才那样说，我心里过不去，我们坐下来讲清楚。」</p>
-<p>一个人、时间长、要求细的活，你坐得住：早上开始，中间不被打断，晚上收工。人多声音杂，你会想退到边上；给你一间安静的屋子、一个清楚的题目，你交出来的东西很干净。</p>
-<blockquote class="city-detail__contrast">说自己喜静，家里的电视一直开着。</blockquote>
-<p>早上七点，茶馆的门板一块块卸下来，木头碰木头。</p>
-<p>早上七点去老茶馆坐半小时，听旁边人说话。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：Gisling｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="zhuhai" style="--card-color: #94a2a7"><summary><div class="city-card__media"><img src="assets/files/13594c9138_zhuhai-fisher-girl-640.jpg" alt="珠海 · 珠海渔女雕像" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">珠海</h3><span class="city-card__badge">海风</span><p class="city-card__line">路灯亮起来，堤上就剩风</p><p class="city-card__when">秋天傍晚六点，长堤上起风</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">海风</span><p class="city-card__when">秋天傍晚六点，长堤上起风</p></div><p class="city-detail__tagline">海风把马路吹得很空</p>
-<p>路宽，树多，海边一条长堤没人抢；九点以后街上就安静了，玻璃楼在暗处亮着。</p>
-<p>出门不用挑时间，路宽、树多，走上半小时也遇不到几个熟人。天黑之后路上就没什么人了，你正好在那时候出门。一天排两三件事就够，多出来的时间你不打算填，也不觉得浪费。楼是新的、路是直的，你不觉得这里有什么旧事要惦记，也不留旧东西。</p>
-<ul><li>把日子过得干净利落</li><li>一个人待着也不空</li><li>在安静里把事做完</li></ul>
-<ul><li>被人拉着热闹一场，能量容易空转</li><li>为旧事多停一会儿，这一格常空</li></ul>
-<p>对方想天天见面，你觉得一周见两次刚好，谁也没说破，就慢慢淡了，谁也没再提。可以早点讲清楚：「我喜欢你，但我也需要自己待着的时间，这不是在躲你。」</p>
-<p>在安静、人少、时间自己排的地方最省力：上午一个人做，下午散个步再回来。需要随时在线、随时被叫的场合，你会想关机；把会议压到最少，你能在同样时间里做完更多。</p>
-<blockquote class="city-detail__contrast">说怕吵，耳机里却一直有人说话。</blockquote>
-<p>晚上九点，海边堤上没几个人，风把声音吹散。</p>
-<p>傍晚六点去海边长堤走一段，走到灯亮。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：Brücke-Osteuropa｜Public domain（公有领域/CC0）｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="dali" style="--card-color: #94b9ec"><summary><div class="city-card__media"><img src="assets/files/df4dad097e_dali-three-pagodas-640.jpg" alt="大理 · 崇圣寺三塔" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">大理</h3><span class="city-card__badge">石板</span><p class="city-card__line">店门几点开，看当天心情</p><p class="city-card__when">春天上午十一点，城外田边</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">石板</span><p class="city-card__when">春天上午十一点，城外田边</p></div><p class="city-detail__tagline">时间在这里不太准</p>
-<p>城墙以内是石板路，城外是田和湖；狗在门口睡，店开到几点看心情。</p>
-<p>十一点才吃早饭，两点吃完午饭，你从来不觉得这有什么不对。路上人不多，你也不急着认识谁，点头就过去了。路是顺着地势长的，你走熟了就不看方向。旧东西你留得多：旧衣服、旧票根、别人不要的桌子，你都觉得还能用，扔了可惜。</p>
-<ul><li>把慢日子过出内容</li><li>一个人待很久不慌</li><li>留住别人丢掉的东西</li></ul>
-<ul><li>把约定固定下来，能量容易空转</li><li>在人群里争一个位置，这一格常空</li></ul>
-<p>对方问「我们以后怎么办」，你说「先这样吧」，对方听着像被拖着，问过一次就不再问，你也没主动说。可以诚实一点：「我现在给不了时间表，但我想和你把这段日子过好。」</p>
-<p>在没固定作息、自己定顺序的地方最来劲：想干就一口气干到半夜，不想干就出门走一圈。要求准点打卡、每天一个节奏的场合，你会想逃；给你一个宽松的期限，你反而会提前交。</p>
-<blockquote class="city-detail__contrast">说不在乎时间，约人却总能准时到。</blockquote>
-<p>傍晚七点，狗在门口翻了个身，石板路上有人拖着鞋走。</p>
-<p>早上去城外的田边坐一会儿，看人下地。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：Ngguls｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons</p></div></details>
-<details class="city-card" data-city="yantai" style="--card-color: #3d3314"><summary><div class="city-card__media"><img src="assets/files/77b15a5184_yantai-city-view-640.jpg" alt="烟台 · 市区远眺" loading="lazy" decoding="async" width="640" height="480"></div><div class="city-card__body"><h3 class="city-card__name">烟台</h3><span class="city-card__badge">拐弯</span><p class="city-card__line">坡上走一趟，能看见海</p><p class="city-card__when">夏天傍晚六点半，坡上看得见海</p></div></summary><div class="city-detail"><div class="city-detail__meta"><span class="city-card__badge">拐弯</span><p class="city-card__when">夏天傍晚六点半，坡上看得见海</p></div><p class="city-detail__tagline">海拐个弯，城就跟着拐</p>
-<p>海岸线把城区切得零碎，坡上坡下都是房；风大，街上人少，晚饭吃得早。</p>
-<p>摊主把秤收起来，冲你摆摆手，你提着空袋子沿着海边慢慢往家走。城顺着海岸拐，你出门常常拐着拐着就到了别处，走到哪儿算哪儿，回来再吃饭。晚饭吃得早，天黑之后就不太出门了。旧的东西你不留，新的地方你也不急着去。</p>
-<ul><li>在空里把一天填满</li><li>一个人守住一件事</li><li>换个方向也不慌</li></ul>
-<ul><li>主动约一次人，能量容易空转</li><li>为一件旧事回头，这一格常空</li></ul>
-<p>对方问你想要什么，你说「都行」，问了几次对方就不问了，两个人也越来越少话，饭桌上只剩筷子声。可以试着说：「我说都行，是怕说错，你多问一句我就说得出来。」</p>
-<p>在人少、节奏慢、能自己排顺序的地方最稳：上午做一件，下午做一件，中间出门走一圈。要求快、要求当场回应的场合，你会想躲；把时间放宽、要交的写清楚，你能一直做下去。</p>
-<blockquote class="city-detail__contrast">说没什么想法，选馆子纠结半小时。</blockquote>
-<p>傍晚六点半，风从坡上下来，饭菜的味道跟着过来。</p>
-<p>傍晚去坡上那条路走上去，站到能看见海。</p>
-
-<p class="city-detail__attribution" data-attribution>摄影：Aaron Zhu｜许可：CC BY-SA 3.0｜来源：Wikimedia Commons</p></div></details></div>
+    <div class="copy-block" data-copy="atlas"><h2 class="atlas__title">城市图鉴</h2></div>
+    <p class="atlas__hint"><span class="atlas__hint-dot" aria-hidden="true"></span><span class="atlas__hint-text">点开一座城，有句你没听过的</span></p>
+    <div class="copy-block" data-copy="atlas"><p class="atlas__desc">16 座城市，每张卡一句话、一个最好去的时段。</p><p class="atlas__guide">往下翻，看完全部 16 座，再决定先点哪一张。</p></div>
+    <div class="atlas__grid" id="atlas-grid"><article class="city-card" data-city="shanghai" style="--card-color: #a0b8c4"><button type="button" class="city-card__open" data-open-city="shanghai" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/a153f6d45e_shanghai-bund-pudong-640.jpg" alt="上海 · 外滩望陆家嘴天际线" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">上海</span><span class="city-card__badge">快城</span><span class="city-card__line">晾衣杆下面，走过穿西装的人</span><span class="city-card__when">工作日上午八点，换乘通道里</span></span></button></article>
+<article class="city-card" data-city="shenzhen" style="--card-color: #5f93b8"><button type="button" class="city-card__open" data-open-city="shenzhen" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/ab15116c95_shenzhen-skyline-640.jpg" alt="深圳 · 福田高楼群" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">深圳</span><span class="city-card__badge">新城</span><span class="city-card__line">箱子拉链，到了这儿就没开过</span><span class="city-card__when">秋天下午四点，书店二楼靠窗</span></span></button></article>
+<article class="city-card" data-city="chongqing" style="--card-color: #68453b"><button type="button" class="city-card__open" data-open-city="chongqing" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/f365da25e5_chongqing-hongyadong-640.jpg" alt="重庆 · 洪崖洞夜景" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">重庆</span><span class="city-card__badge">坡城</span><span class="city-card__line">导航说左转，脚下是台阶</span><span class="city-card__when">傍晚六点，喇叭喊着收摊</span></span></button></article>
+<article class="city-card" data-city="dongguan" style="--card-color: #9e9380"><button type="button" class="city-card__open" data-open-city="dongguan" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/9e8a7f2072_dongguan-yulan-theatre-640.jpg" alt="东莞 · 玉兰大剧院前广场" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">东莞</span><span class="city-card__badge">轮班</span><span class="city-card__line">夜市收摊时，早班的人来了</span><span class="city-card__when">早上换班那半小时，街上最多人</span></span></button></article>
+<article class="city-card" data-city="beijing" style="--card-color: #6e7382"><button type="button" class="city-card__open" data-open-city="beijing" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/0a400e8605_beijing-cbd-jingshan-640.jpg" alt="北京 · 景山望 CBD 天际线" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">北京</span><span class="city-card__badge">宽城</span><span class="city-card__line">越宽的街，越适合一个人走</span><span class="city-card__when">秋天下午，胡同里有人骑车经过</span></span></button></article>
+<article class="city-card" data-city="hefei" style="--card-color: #89a5c9"><button type="button" class="city-card__open" data-open-city="hefei" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/e412776243_hefei-swan-lake-640.jpg" alt="合肥 · 天鹅湖畔天际线" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">合肥</span><span class="city-card__badge">直线</span><span class="city-card__line">商场还挂着招租，路先修好了</span><span class="city-card__when">晚上十点，新区主路只剩路灯</span></span></button></article>
+<article class="city-card" data-city="lanzhou" style="--card-color: #bc997e"><button type="button" class="city-card__open" data-open-city="lanzhou" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/b4d345f2b4_lanzhou-zhongshan-bridge-640.jpg" alt="兰州 · 中山桥与黄河" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">兰州</span><span class="city-card__badge">沿河</span><span class="city-card__line">桥下风大，面要趁热吃</span><span class="city-card__when">早上七点，桥下风声最大</span></span></button></article>
+<article class="city-card" data-city="yinchuan" style="--card-color: #5293d6"><button type="button" class="city-card__open" data-open-city="yinchuan" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/04ce2790a9_yinchuan-jinfeng-skyline-640.jpg" alt="银川 · 金凤区天际线" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">银川</span><span class="city-card__badge">天低</span><span class="city-card__line">整条路上，只有你等灯</span><span class="city-card__when">夏天傍晚，路上遇不到几个人</span></span></button></article>
+<article class="city-card" data-city="suzhou" style="--card-color: #39392e"><button type="button" class="city-card__open" data-open-city="suzhou" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/034e71bd2f_suzhou-jinji-lake-640.jpg" alt="苏州 · 金鸡湖畔天际线" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">苏州</span><span class="city-card__badge">窄巷</span><span class="city-card__line">巷子窄到，两个人都要让</span><span class="city-card__when">下雨的下午，河贴着墙根走</span></span></button></article>
+<article class="city-card" data-city="kunming" style="--card-color: #3b444b"><button type="button" class="city-card__open" data-open-city="kunming" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/feef60911e_kunming-skyline-sunset-640.jpg" alt="昆明 · 城市天际线夕照" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">昆明</span><span class="city-card__badge">出太阳</span><span class="city-card__line">花摆在门口，比招牌显眼</span><span class="city-card__when">冬天中午，茶馆门口晒得到太阳</span></span></button></article>
+<article class="city-card" data-city="chengdu" style="--card-color: #5e8dac"><button type="button" class="city-card__open" data-open-city="chengdu" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/c17d346548_chengdu-skyline-snow-640.jpg" alt="成都 · 雪山下的城市天际线" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">成都</span><span class="city-card__badge">慢城</span><span class="city-card__line">急事坐下来，也得等茶泡开</span><span class="city-card__when">秋天下午三点，院子里刚开局</span></span></button></article>
+<article class="city-card" data-city="nanning" style="--card-color: #909eb1"><button type="button" class="city-card__open" data-open-city="nanning" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/d3469cf366_nanning-qingxiu-view-640.jpg" alt="南宁 · 青秀山望城区" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">南宁</span><span class="city-card__badge">夜市</span><span class="city-card__line">天黑了，这条街才开始营业</span><span class="city-card__when">夏天晚上九点，摊子刚支好</span></span></button></article>
+<article class="city-card" data-city="yangzhou" style="--card-color: #b0c9f7"><button type="button" class="city-card__open" data-open-city="yangzhou" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/a17b11b12c_yangzhou-five-pavilion-640.jpg" alt="扬州 · 瘦西湖五亭桥" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">扬州</span><span class="city-card__badge">早茶</span><span class="city-card__line">早上一壶茶，能坐掉半个上午</span><span class="city-card__when">春天早上，老茶馆刚开门</span></span></button></article>
+<article class="city-card" data-city="zhuhai" style="--card-color: #94a2a7"><button type="button" class="city-card__open" data-open-city="zhuhai" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/13594c9138_zhuhai-fisher-girl-640.jpg" alt="珠海 · 珠海渔女雕像" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">珠海</span><span class="city-card__badge">海风</span><span class="city-card__line">路灯亮起来，堤上就剩风</span><span class="city-card__when">秋天傍晚六点，长堤上起风</span></span></button></article>
+<article class="city-card" data-city="dali" style="--card-color: #94b9ec"><button type="button" class="city-card__open" data-open-city="dali" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/df4dad097e_dali-three-pagodas-640.jpg" alt="大理 · 崇圣寺三塔" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">大理</span><span class="city-card__badge">石板</span><span class="city-card__line">店门几点开，看当天心情</span><span class="city-card__when">春天上午十一点，城外田边</span></span></button></article>
+<article class="city-card" data-city="yantai" style="--card-color: #3d3314"><button type="button" class="city-card__open" data-open-city="yantai" aria-haspopup="dialog"><span class="city-card__media"><img src="assets/files/77b15a5184_yantai-city-view-640.jpg" alt="烟台 · 市区远眺" loading="lazy" decoding="async" width="640" height="480"></span><span class="city-card__body"><span class="city-card__name">烟台</span><span class="city-card__badge">拐弯</span><span class="city-card__line">坡上走一趟，能看见海</span><span class="city-card__when">夏天傍晚六点半，坡上看得见海</span></span></button></article></div>
     <template id="atlas-fallback">
-      <div class="city-card__media is-placeholder"><span class="city-card__placeholder">图还在路上</span></div>
+      <span class="city-card__media is-placeholder"><span class="city-card__placeholder">图还在路上</span></span>
     </template>
   </section>
 
@@ -1603,12 +1881,32 @@ a:not(.btn):focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
   </section>
   <div class="error-block" id="error-block" hidden><p class="notice" id="error-text"></p></div>
 </main>
+
+<a class="btn btn--primary sticky-cta" id="sticky-cta" href="quiz.html" data-label-key="start" aria-label="开始">开始</a>
+
+<dialog class="city-modal" id="city-modal" role="dialog" aria-modal="true" aria-labelledby="city-modal-name">
+  <div class="city-modal__panel">
+    <button type="button" class="city-modal__close" id="city-modal-close" aria-label="关闭弹窗"><span aria-hidden="true">×</span></button>
+    <div class="city-modal__media" id="city-modal-media"><img id="city-modal-img" alt="" decoding="async"></div>
+    <div class="city-modal__body" id="city-modal-body">
+      <p class="city-modal__hd"><span class="city-modal__name" id="city-modal-name"></span><span class="city-card__badge" id="city-modal-badge"></span></p>
+      <p class="city-modal__line" id="city-modal-line"></p>
+      <p class="city-modal__when" id="city-modal-when"></p>
+      <div class="city-modal__trivia">
+        <span class="city-modal__trivia-label" aria-hidden="true">冷知识 · TRIVIA</span>
+        <p id="city-modal-trivia"></p>
+      </div>
+      <p class="city-modal__credit" id="city-modal-credit" data-attribution></p>
+    </div>
+  </div>
+</dialog>
 <footer class="foot"><div class="stage"><p>本测试用于自我探索与娱乐，不构成心理诊断，也不能替代专业心理评估。</p></div></footer>
 
-<script>window.__STRINGS = {"buttons":{"start":"开始","next":"下一题","prev":"上一题","see-result":"看结果","retake":"再测一次","share":"分享","copy-link":"复制链接","home":"返回首页","exit":"退出答题","keep-going":"继续答题","tear-stub":"撕下票根","put-back":"放回票根"},"errors":{"load-failed":"出错了，刷新一下再试。","copy-failed":"复制不成，手动选一下地址栏里的地址吧。","incomplete":"还有题没答，答完才能看结果。","no-result":"没找到这次的结果，回去再答一遍。"},"aria":{"loading":"加载中","progress":"已答 {done} 题，共 {total} 题","question":"第 {n} 题，共 {total} 题","option-a":"选项 A","option-b":"选项 B","copied":"链接已复制","result":"结果车票：{title}","scale":"{label}，{value} 分，满分 100","gate-code":"车票号","gate-error":"票号没对上，请再核对一次","gate-submitting":"正在验票"}};</script>
-<script>window.__QUIZ = {"key":"city-frequency","title":"与你同频的城市","subtitle":"24 题，5 分钟，看哪座城市和你用同一种频率过日子。","version":"1.0","scale":{"min":1,"max":5,"labels":["选了 B（另一侧）","—","—","—","选了 A（断言侧）"]},"norm":{"status":"placeholder","note":"尚无真实常模；pct 由每维 6 题二选一线性换算，只有 7 档，T 分与百分位为线性占位，正式投放前需 ≥500 份样本重算"},"disclaimer":"本测试用于自我探索与娱乐，不构成心理诊断，也不能替代专业心理评估。","dimensions":[{"key":"tempo","label":"节奏","high":"疾行","low":"缓行","desc":"一天被切成几块：走路、说话、回消息是不是都带着速度。"},{"key":"crowd","label":"人群距离","high":"人挨人","low":"各过各的","desc":"你和陌生人之间隔多远：热闹是背景音，还是需要躲开的东西。"},{"key":"grain","label":"肌理","high":"横平竖直","low":"自然生长","desc":"街道是被画出来的，还是顺着地形、河、旧墙长出来的。"},{"key":"age","label":"时间感","high":"叠着旧时间","low":"铺着新地面","desc":"城市把过去摆在明面上，还是用新的盖过去。"}],"items":[{"id":"t1","dim":"tempo","key":1,"text":"周末约了朋友，出门前你发现时间还早。","option_a":"提前十分钟到，在附近先转一圈。","option_b":"掐着点到，到了正好开始。"},{"id":"t2","dim":"tempo","key":1,"text":"上扶梯的时候，前面的人走得不快。","option_a":"从旁边快步走过去，不想跟着。","option_b":"跟在后面，到顶再说。"},{"id":"t3","dim":"tempo","key":1,"text":"手机响了一声，是条不着急的消息。","option_a":"手头停一下，先把消息回了。","option_b":"放着，等空了再一起回。"},{"id":"t4","dim":"tempo","key":-1,"text":"餐厅要等位，前面还有七八桌。","option_a":"坐在门口慢慢等，不催也不走。","option_b":"站着来回走，时不时问一下还有几桌。"},{"id":"t5","dim":"tempo","key":-1,"text":"一整个周末都没有约，也没有安排。","option_a":"就这么空着，睡到自然醒。","option_b":"临时找点事做，把时间填上。"},{"id":"t6","dim":"tempo","key":-1,"text":"聚会结束，大家准备走了，有人说再坐会儿。","option_a":"那就再坐会儿，不急着走。","option_b":"看下时间，起身收拾东西。"},{"id":"c1","dim":"crowd","key":1,"text":"下班时间，街上人挤人，只能侧着身走。","option_a":"顺着人流走，贴着人也不觉得别扭。","option_b":"绕到边上，找条人少的路走。"},{"id":"c2","dim":"crowd","key":1,"text":"进了一家小馆子，位置还剩几张。","option_a":"坐大堂中间的桌子，人多热闹。","option_b":"挑靠墙的角落，背对着人坐。"},{"id":"c3","dim":"crowd","key":1,"text":"等车的时候，旁边的人跟你搭话。","option_a":"接着聊几句，问问对方去哪。","option_b":"点头应一声，转头看手机。"},{"id":"c4","dim":"crowd","key":-1,"text":"散场的时候，出口挤满了人。","option_a":"在原地站一会儿，等人少了再走。","option_b":"跟着人流往外挤，挤着也不烦。"},{"id":"c5","dim":"crowd","key":-1,"text":"出门前，你大概知道几点路上最挤。","option_a":"错开那个点，宁愿晚一点出门。","option_b":"照常去，挤一点也没什么。"},{"id":"c6","dim":"crowd","key":-1,"text":"同事接了电话，回来脸色不太好。","option_a":"不打听，等他自己想说。","option_b":"问一句怎么了，接着聊两句。"},{"id":"g1","dim":"grain","key":1,"text":"第一次去一个陌生的街区，下地铁就懵了。","option_a":"先打开地图，看清方向再走。","option_b":"先随便走，走错再改。"},{"id":"g2","dim":"grain","key":1,"text":"下班回家，你把钥匙和包放下。","option_a":"挂在门后固定的钩上。","option_b":"哪块台面空就放哪儿。"},{"id":"g3","dim":"grain","key":1,"text":"要办的事情有好几件，一天之内跑完。","option_a":"先列个单子，按顺序一件件来。","option_b":"想到哪件办哪件，走一步看一步。"},{"id":"g4","dim":"grain","key":-1,"text":"路过一条没走过的小巷，里面有家小店。","option_a":"拐进去看看，绕远一点也行。","option_b":"按原路走，赶时间就不进去了。"},{"id":"g5","dim":"grain","key":-1,"text":"和朋友约在一个没去过的路口碰头。","option_a":"凭着感觉往前走，差不多就到。","option_b":"先看清路牌和门牌号再走。"},{"id":"g6","dim":"grain","key":-1,"text":"下午的约临时取消了，多出两个小时。","option_a":"就在附近随便逛，走到哪算哪。","option_b":"重新排一下，先去办计划里的事。"},{"id":"a1","dim":"age","key":1,"text":"路过一栋外墙斑驳的老楼，门口挂着褪色的招牌。","option_a":"停下来多看两眼，想知道它以前是什么。","option_b":"看一眼就走，注意力马上回到手上的事。"},{"id":"a2","dim":"age","key":1,"text":"出门吃饭，你知道附近有家开了很多年的老店。","option_a":"专程走过去，就想在旧桌子边坐坐。","option_b":"附近随便找一家，方便就行。"},{"id":"a3","dim":"age","key":1,"text":"收拾房间，翻出一箱旧东西。","option_a":"挑一挑留下来，装回箱子里。","option_b":"用不上的收拾掉，腾出地方。"},{"id":"a4","dim":"age","key":-1,"text":"街角新开了一家店，装修刚做完。","option_a":"想进去看看，新的总有点意思。","option_b":"还是去常去的那家，习惯了。"},{"id":"a5","dim":"age","key":-1,"text":"用了好几年的东西，突然坏了。","option_a":"直接买个新的，不折腾修。","option_b":"先看看能不能修，修好接着用。"},{"id":"a6","dim":"age","key":-1,"text":"有人跟你讲起多年前这里的样子。","option_a":"听个大概，还是现在的事要紧。","option_b":"追问细节，想知道那时候什么样。"}],"archetypes":[{"key":"shanghai","name":"上海","en":"Shanghai","tagline":"走得快，也留得住旧门牌","city_trait":"弄堂口晾着衣服，拐个弯就是玻璃幕墙；电梯里没人说话，脚步都很急。","portrait":"七点四十，地铁进站，门一开你就迈出去，早饭在哪买、出地铁走哪边都算好了。人再多也不影响你走，顺着人流反而走得顺，被人撞一下也不会回头。包里还有一张折过很多次的收据，是你舍不得扔的小东西，可你不会为它多停一分钟。","strengths":["能在人堆里把事一路办完","把一堆乱事先排成顺序","记住别人不在意的小讲究"],"blind_spots":["没人催的下午，能量容易空转","和自己待一整天，这一格常空着"],"relationship":"约好七点吃饭，对方六点五十说在路上，你已经在楼下站了二十分钟，语气就冷了半度。你真正想说的是：「我不怕等，我怕等到最后只有我一个人在赶。」","work":"最容易出活的是身边有人在走动的地方：节奏快、事情有先后、反馈当场就能给到，你会被推着往前走。全程安静、一个人对着屏幕的半天，反而要花很久才进状态。","contrast":"你说自己不耐烦，可等红灯时只有你在看倒计时。","resonance_moment":"晚上八点半，写字楼玻璃门一开，风灌进来那一下。","if_you_go":"早上七点去菜市场，先站在门口看十分钟再进去。","stamp":"准点到达","prototype":{"tempo":92,"crowd":94,"grain":86,"age":84}},{"key":"shenzhen","name":"深圳","en":"Shenzhen","tagline":"所有路口都朝前，没人问你从哪来","city_trait":"地铁里全是年轻的脸，楼是新的，路是直的；夜里十一点，写字楼还亮着一半。","portrait":"柜子里只留一个箱子，换地方时拎起来就能走，拉链都没怎么拉开过。早上出门时间算得很准，一路都是直路，不用绕。人挤的地方你不烦，反倒觉得有劲。手机里没有几张去年的照片，你更关心下周要做什么、跟谁一起做，别人不打听你的来历，你也乐得不解释。","strengths":["把没做过的事先接下来","在陌生人群里迅速搭上话","把新东西很快变成自己的"],"blind_spots":["回头整理旧事，这一格总是空着","慢下来等一个结果，能量容易散"],"relationship":"对方翻出三年前的聊天记录，你只记得上个月的事，两个人就卡在那儿，谁也没往下说，气氛慢慢凉下来。你可以直接讲：「以前的事改不了了，我更想知道以后怎么过。」","work":"在目标清楚、所有人朝一个方向的地方，你出活最快：会议短、结论快、当天就能动手。反过来，需要反复论证历史原因、照顾各种旧关系的场合，你会耗到没电。","contrast":"手机里没一张旧照片，搬家却留着第一把钥匙。","resonance_moment":"晚上十一点，电梯一层层停，门开时还有人讲方案。","if_you_go":"下午四点去新开的书店，坐二楼靠窗那个位置。","stamp":"从零开始","prototype":{"tempo":96,"crowd":90,"grain":92,"age":8}},{"key":"chongqing","name":"重庆","en":"Chongqing","tagline":"楼上是马路，楼下还是马路","city_trait":"坡和台阶把城市折起来，导航常常失灵；火锅店里说话全靠喊。","portrait":"从一楼进去，出来是七楼，你从来没觉得哪里不对，也不回头数台阶。人多的地方你自在，声音再大也不影响你说自己的事。下雨天台阶打滑，你踩上去也不减速。相册里存着很多「这里以前是什么样」的照片，可你从不停下来细看，边走边拍，拍完就走。","strengths":["在乱的地方找到自己的路","人多时把气氛带起来","把老地方讲出新意思"],"blind_spots":["按部就班整理，能量容易空转","把一件事慢慢说完，这一格常空"],"relationship":"两个人一起出门，你走前面拐了个弯，回头人已经不在了，路上也没再说过话；对方觉得你不管人，你觉得是对方跟不上。可以直说：「我拐弯前喊你一声，你别自己生闷气。」","work":"适合在事情随时会变的地方干活：现场谈、当场改、出了问题马上补。流程写得太细、一步不能动的场合，你会坐不住；给你一块能自己发挥的地，你能顶住一整天的乱。","contrast":"你说自己不怕乱，出门却总要带充电宝。","resonance_moment":"傍晚六点，坡上的喇叭喊着收摊，声音从上往下滚。","if_you_go":"六点上天桥，站着看车拐弯，看十分钟就下来。","stamp":"拐个弯就到","prototype":{"tempo":88,"crowd":92,"grain":10,"age":90}},{"key":"dongguan","name":"东莞","en":"Dongguan","tagline":"没有市中心，每条街都在上班","city_trait":"厂房、出租屋、夜市摊挨着长；路口没有统一的样子，凌晨还有人换班。","portrait":"交接班还有十分钟，你已经把下一班要用的东西摆好，手套也戴上了。街上什么样你不太在乎，能办成事就行。住的地方换过几处，行李一直是一个箱子。路怎么长你就怎么走，不用记住哪条是主街。人多你不觉得吵，那种各忙各的热闹让你踏实。","strengths":["在没人安排时自己开工","和不同来路的人搭上话","把手上的活当天做完"],"blind_spots":["留一件舍不得的东西，常空着","慢下来讲一段过去，能量容易空转"],"relationship":"对方约你周末出去，你说「看排班再说」，两次之后对方就不问了，只在你休息那天发一句在吗。你可以早点讲：「我这周只有半天，剩下半天想睡觉，不是不想见你。」","work":"在事情明确、当天就要结果的地方最顺：接手、干完、交接，中间不用开会。需要长时间筹备、反复打磨细节的活，你会烦；把任务拆成今天能做完的块，你就一直有力气。","contrast":"嘴上说随叫随到，手机常年开着静音。","resonance_moment":"凌晨一点，厂门口的灯还亮着，有人刚换完班走出来。","if_you_go":"早上去街边吃一碗粉，坐着看半小时人流。","stamp":"今天先干完","prototype":{"tempo":92,"crowd":86,"grain":8,"age":12}},{"key":"beijing","name":"北京","en":"Beijing","tagline":"路很宽，人和人之间也很宽","city_trait":"环路一圈圈套着老城，胡同里安静，街上说话客气；走很久才遇见一个人。","portrait":"车厢连接处那小块地方，你一站就是四十分钟，谁也不碰着谁。一天排得很满，通勤那段路反倒像留白。周末你会挑一条没走过的街走到底，走完再决定要不要吃饭。你愿意为一堵旧墙多绕半条街，却不愿为一场饭局多坐一小时。","strengths":["把长线的事情一直推下去","一个人待很久也不掉状态","认出别人忽略的老东西"],"blind_spots":["临时起意的热闹，能量容易空转","被人需要的时刻，这一格常空着"],"relationship":"对方说「你什么事都自己定」，你听着像被指责，可你只是习惯想清楚再开口，也懒得解释，别人就以为你冷淡。可以直接讲：「我想一起去，但我想先知道去哪、几点回。」","work":"适合方向清楚、能长时间不被打断的活：关上门推一整天，晚上把结论摆出来。需要随时响应、总被打断的场合，你耗得很快；给你一段没人找的时间，你能把别人推不动的推完。","contrast":"说饭局太长的你，走的时候还站在门口聊。","resonance_moment":"晚上九点，胡同里自行车铃响一声，又静下来。","if_you_go":"早上去胡同口吃碗豆腐脑，绕着墙根走一圈。","stamp":"慢慢来，别停","prototype":{"tempo":84,"crowd":12,"grain":96,"age":94}},{"key":"hefei","name":"合肥","en":"Hefei","tagline":"新修的路，笔直得有点空","city_trait":"新区路宽车少，绿化带比行人多；写字楼亮到很晚，商场里还挂着招租。","portrait":"下班那趟车整节车厢常只坐你一个，扶手一路都没人握。地铁空、街也空，你反倒走得快。你不太留旧东西，换了地方就把之前那套放下。空着的地方你不慌，正好把手机里攒的事一件件办掉。一天结束得晚，但你从不在路上磨时间。","strengths":["从空地上把事搭起来","一个人推进一整个项目","把习惯在三个月里换掉"],"blind_spots":["跟人慢慢熟起来，能量容易空转","在旧事上多待一待，这一格常空"],"relationship":"对方希望你多讲讲今天怎么样，你觉得没什么可说的，就回一句「还行」；对方越想靠近，你越退半步。可以试着说：「我不是不想讲，是我得有人问得具体一点。」","work":"在有明确目标、协作人数少的地方最有效率：三五个人、一间会议室、当天出结果。人一多、会一长，你就开始看表；把范围缩小、把结论提前定好，你能连着干很久。","contrast":"说没计划的人，日程表已经排到下个月。","resonance_moment":"晚上十点，路灯一盏盏亮过去，车很少，风声清楚。","if_you_go":"傍晚去新区那条主路走一遍，从这头走到那头。","stamp":"一条直线","prototype":{"tempo":86,"crowd":15,"grain":88,"age":10}},{"key":"lanzhou","name":"兰州","en":"Lanzhou","tagline":"城市被拉成一条线，跟着河走","city_trait":"两山夹着一条河，城区顺着河谷铺开；早上吃完面就走，桥下风声很大。","portrait":"口袋里的公交卡磨得发白，边角都软了，你还在用，也没想过换。出城只有那么几个方向，你也习惯沿着一条路一直往前，不拐弯。早上那碗面吃完就走，不坐着聊。你对旧东西有感情，桥、墙、老楼，你都记得它们在哪儿，但也只是路过时多看一眼，看完继续走。","strengths":["沿着一条线把事做到底","一个人赶路不觉得闷","记住一条街的旧样子"],"blind_spots":["停下来和人闲坐，能量容易空转","把心里的事说出口，这一格常空"],"relationship":"对方想晚上一起吃饭慢慢聊，你说「吃完我还得回去」，话很直，对方听着像被推开，饭桌就冷了下来。可以换个说法：「我不是不想聊，我是想早点回去，明天一起吃早饭。」","work":"一条线走到底的活最适合你：接手、埋头、当天出结果，中间不需要人陪。需要频繁碰头、边聊边定的场合，你会想赶紧结束；把目标和期限写清楚交给你，你能一个人推很远。","contrast":"说自己不爱讲话，问路能问三分钟。","resonance_moment":"早上七点，面馆的热气糊住玻璃，勺子碰碗响。","if_you_go":"早上七点半去吃一碗面，加个蛋，十分钟吃完。","stamp":"顺着河走","prototype":{"tempo":82,"crowd":8,"grain":12,"age":78}},{"key":"yinchuan","name":"银川","en":"Yinchuan","tagline":"路很直，天很低，人不多","city_trait":"马路宽得能并排走好几队人，湖和沙都在城边；太阳落得慢，街上安安静静。","portrait":"钥匙、手机、一张卡，兜里就这三样，出门不用回头看一眼。路口等灯的时候，前后常常只有你一个。一天的事排得紧，但从头到尾都是自己一个人办，不用协调谁。太阳落得慢，你也不急着回家。旧的招牌你看见了不会特意记，换了新的，你很快就习惯。","strengths":["在空地方自己安排一整天","把事干得又快又干净","换环境不用缓冲期"],"blind_spots":["跟人深聊到半夜，能量容易空转","为一件事反复回头，这一格常空"],"relationship":"对方发来一长段话，你回了两行就去做别的事，隔了半天才想起没回完，对方以为你在生气。你可以先说清楚：「我没不高兴，我只是话少，你别拿字数猜我。」","work":"人少、路清、目标单一的地方最适合你：早上把一天排好，然后就一直往前推。需要不停商量、协调各方意见的场合，你会烦；把决定权交给你、只留一个结果要交，你的速度很快。","contrast":"嘴上说不合群，聚餐你却先到。","resonance_moment":"傍晚七点，太阳压得很低，湖边的风一阵一阵。","if_you_go":"傍晚沿着那条宽路往城外走，走到看见湖为止。","stamp":"路宽人少","prototype":{"tempo":78,"crowd":5,"grain":10,"age":6}},{"key":"suzhou","name":"苏州","en":"Suzhou","tagline":"慢一点，才走得到园子深处","city_trait":"巷子窄，河在墙根下走；评弹从窗里飘出来，老人坐在门口剥豆子。","portrait":"巷口的石阶被踩得发亮，你每次路过都要在上面站一会儿，才接着往巷子深处走。巷子窄、路是正的，你走进去一般不会走错。你对旧东西有耐心，一张旧桌子、一块旧砖，你能看上半天，看不完也没关系；一天没办几件事，你也不急。","strengths":["在慢里把一件小事做细","人多的地方待一天不累","认出老东西的好处"],"blind_spots":["抢在别人前面出手，能量容易空转","把话说得很直，这一格常空着"],"relationship":"对方说话很冲，你不接，过两天才用一句轻的话提起来，对方以为你早就不在意了，下一次也就不提了。可以直接说：「那天那句话我记住了，我只是不想当场吵。」","work":"在有秩序、节奏不快、有人的地方最舒服：一件事改几遍也不烦，细节一层层抠下来。要当场拍板、一路往前冲的场合，你会卡住；给你时间和安静的角落，你能交出很稳的东西。","contrast":"说自己慢，出门却一回都没迟到。","resonance_moment":"下午三点，评弹从窗户里飘出来，河在墙根下响。","if_you_go":"下午去老巷子里走一条，走到河边就坐下。","stamp":"慢慢走","prototype":{"tempo":10,"crowd":88,"grain":92,"age":96}},{"key":"kunming","name":"昆明","en":"Kunming","tagline":"太阳出来了，事情可以晚点说","city_trait":"街上花比招牌多，茶馆能坐一下午；新楼底下还卖着烧饵块，说话都慢。","portrait":"上午十点，街边的小店才陆续拉开卷帘门，茶壶刚坐上炉子。太阳一出来，很多事都可以推到下午再说。楼是新的、路是直的，你不太在意这里以前是什么样，也不太留旧东西。急事来了你也先坐下再说。别人急你不急，事情最后也都办成了。","strengths":["让紧绷的气氛松下来","在人堆里把事情说圆","不着急也把活干完"],"blind_spots":["把进度往前赶一赶，能量容易空转","为旧事难过一场，这一格常空"],"relationship":"对方问「到底什么时候能定」，你回「快了」，这话说到第三次，对方就不问了，自己先去把事定了。可以具体一点：「我今晚八点前给你答复，没给就打电话催我。」","work":"在节奏松、身边有人的地方最顺手：边晒太阳边把事聊开，人一多你反而思路活。需要卡死时间、全程盯表的场合，你会做得很别扭；把时间放宽、留出聊天余量，你的产出反而稳。","contrast":"说佛系的人，外卖超时就开始看手机。","resonance_moment":"傍晚四点，太阳斜进茶馆，杯子放在桌上轻轻一响。","if_you_go":"下午三点找一家茶馆坐下，点一杯，坐满一小时。","stamp":"慢慢来嘛","prototype":{"tempo":12,"crowd":82,"grain":80,"age":14}},{"key":"chengdu","name":"成都","en":"Chengdu","tagline":"茶泡开了，急事也变慢了","city_trait":"竹椅摆到街边，麻将声从院子里传出来；巷子拐来拐去，屋檐还是旧的。","portrait":"盖碗里的茶续到第三道，你才把手机倒扣回桌上，谁也不催谁。路没有一条是直的，你走熟了就不看导航。坐满的院子、摆到街边的桌子，你觉得那才是正常的声音。旧屋檐、旧门牌你会记得，但不挂在嘴上；一天走不远，话倒说了不少。","strengths":["把一群人拢在一张桌上","在慢里等出一个好结果","记得住旧地方的老样子"],"blind_spots":["把截止日期当真，能量容易空转","一个人待一整天，这一格常空"],"relationship":"对方说好七点到，八点还没来，你也不催，只是把菜先动了；等人坐下，你已经没什么想说的。这句话当时就该讲出来：「我不生气，但你迟到的时候，我会觉得自己不重要。」","work":"在有人的地方、节奏自己定的时候最出活：一张桌子、几个人、边说边做，聊到一半事情就成了。只看进度的场合，你会拖；给你一点松的时间和人，你能把难推的事推起来。","contrast":"嘴上随遇而安，改行程时一句句问清楚。","resonance_moment":"傍晚六点，院子里麻将牌倒下来，哗啦一声。","if_you_go":"下午去巷子里找一家茶馆，坐到天黑再走。","stamp":"坐一会儿","prototype":{"tempo":6,"crowd":90,"grain":14,"age":86}},{"key":"nanning","name":"南宁","en":"Nanning","tagline":"夜里才是一天的开始","city_trait":"电动车流在树下穿，夜市一直摆到半夜；楼是新的，街是弯的。","portrait":"晚上九点，楼下的摊子才刚支起来，你把椅子往外挪了挪。街上人多、车多、声音杂，你不觉得吵，还愿意在人堆里慢慢骑着走。路是弯的，你也习惯拐着走。新的楼、新的店你进去得很快，旧东西不太留，前一天的事也很少再想，也不太回头。","strengths":["把夜晚过成一整天","在热闹里把关系维持住","临时起意也能办成事"],"blind_spots":["早上的事按时办掉，能量容易空转","把旧账翻清楚，这一格常空着"],"relationship":"对方早上发消息，你到晚上才回，对方觉得被晾着，几次之后就不发了。可以提前打个招呼：「我白天基本不看手机，晚上八点以后我都在，有事那时候说。」","work":"天黑之后你反而清醒：晚上开会、夜里改稿、边吃边聊，效率比白天高。上午被按在桌前、要求准点的场合，你很难进状态；把重要的事排到傍晚，你能一口气做完。","contrast":"说自己是夜猫子，闹钟却设了三个。","resonance_moment":"晚上十一点，电动车从树下穿过，铃声一串。","if_you_go":"晚上九点去夜市走一趟，从这头吃到那头。","stamp":"夜里开始","prototype":{"tempo":8,"crowd":84,"grain":6,"age":8}},{"key":"yangzhou","name":"扬州","en":"Yangzhou","tagline":"一条街走完，刚好一壶茶","city_trait":"老城方正，巷子安静；早上喝茶，晚上泡澡，路上人不多，说话都轻。","portrait":"街口那家茶社的椅子一直摆到路边，你走完一条街正好坐下，一壶茶还没凉。路是正的，你走起来心里有数，不用问人。你对旧东西有耐性，老墙、老门、老字，你能站在那儿看很久。一天只办一件事，你也不觉得亏，也不觉得那是浪费。","strengths":["一个人把日子过得很稳","把一件旧事照顾到底","在安静里想清楚再动"],"blind_spots":["被人群推着往前走，能量容易空转","把火气发出来，这一格常空着"],"relationship":"对方嗓门一大，你就不说话了，事后也不太提，对方以为这事过去了，你也当它过去了，谁也不提。可以试着说：「你刚才那样说，我心里过不去，我们坐下来讲清楚。」","work":"一个人、时间长、要求细的活，你坐得住：早上开始，中间不被打断，晚上收工。人多声音杂，你会想退到边上；给你一间安静的屋子、一个清楚的题目，你交出来的东西很干净。","contrast":"说自己喜静，家里的电视一直开着。","resonance_moment":"早上七点，茶馆的门板一块块卸下来，木头碰木头。","if_you_go":"早上七点去老茶馆坐半小时，听旁边人说话。","stamp":"一壶茶的工夫","prototype":{"tempo":12,"crowd":10,"grain":90,"age":92}},{"key":"zhuhai","name":"珠海","en":"Zhuhai","tagline":"海风把马路吹得很空","city_trait":"路宽，树多，海边一条长堤没人抢；九点以后街上就安静了，玻璃楼在暗处亮着。","portrait":"出门不用挑时间，路宽、树多，走上半小时也遇不到几个熟人。天黑之后路上就没什么人了，你正好在那时候出门。一天排两三件事就够，多出来的时间你不打算填，也不觉得浪费。楼是新的、路是直的，你不觉得这里有什么旧事要惦记，也不留旧东西。","strengths":["把日子过得干净利落","一个人待着也不空","在安静里把事做完"],"blind_spots":["被人拉着热闹一场，能量容易空转","为旧事多停一会儿，这一格常空"],"relationship":"对方想天天见面，你觉得一周见两次刚好，谁也没说破，就慢慢淡了，谁也没再提。可以早点讲清楚：「我喜欢你，但我也需要自己待着的时间，这不是在躲你。」","work":"在安静、人少、时间自己排的地方最省力：上午一个人做，下午散个步再回来。需要随时在线、随时被叫的场合，你会想关机；把会议压到最少，你能在同样时间里做完更多。","contrast":"说怕吵，耳机里却一直有人说话。","resonance_moment":"晚上九点，海边堤上没几个人，风把声音吹散。","if_you_go":"傍晚六点去海边长堤走一段，走到灯亮。","stamp":"海风很大","prototype":{"tempo":14,"crowd":6,"grain":86,"age":12}},{"key":"dali","name":"大理","en":"Dali","tagline":"时间在这里不太准","city_trait":"城墙以内是石板路，城外是田和湖；狗在门口睡，店开到几点看心情。","portrait":"十一点才吃早饭，两点吃完午饭，你从来不觉得这有什么不对。路上人不多，你也不急着认识谁，点头就过去了。路是顺着地势长的，你走熟了就不看方向。旧东西你留得多：旧衣服、旧票根、别人不要的桌子，你都觉得还能用，扔了可惜。","strengths":["把慢日子过出内容","一个人待很久不慌","留住别人丢掉的东西"],"blind_spots":["把约定固定下来，能量容易空转","在人群里争一个位置，这一格常空"],"relationship":"对方问「我们以后怎么办」，你说「先这样吧」，对方听着像被拖着，问过一次就不再问，你也没主动说。可以诚实一点：「我现在给不了时间表，但我想和你把这段日子过好。」","work":"在没固定作息、自己定顺序的地方最来劲：想干就一口气干到半夜，不想干就出门走一圈。要求准点打卡、每天一个节奏的场合，你会想逃；给你一个宽松的期限，你反而会提前交。","contrast":"说不在乎时间，约人却总能准时到。","resonance_moment":"傍晚七点，狗在门口翻了个身，石板路上有人拖着鞋走。","if_you_go":"早上去城外的田边坐一会儿，看人下地。","stamp":"看心情","prototype":{"tempo":5,"crowd":8,"grain":5,"age":94}},{"key":"yantai","name":"烟台","en":"Yantai","tagline":"海拐个弯，城就跟着拐","city_trait":"海岸线把城区切得零碎，坡上坡下都是房；风大，街上人少，晚饭吃得早。","portrait":"摊主把秤收起来，冲你摆摆手，你提着空袋子沿着海边慢慢往家走。城顺着海岸拐，你出门常常拐着拐着就到了别处，走到哪儿算哪儿，回来再吃饭。晚饭吃得早，天黑之后就不太出门了。旧的东西你不留，新的地方你也不急着去。","strengths":["在空里把一天填满","一个人守住一件事","换个方向也不慌"],"blind_spots":["主动约一次人，能量容易空转","为一件旧事回头，这一格常空"],"relationship":"对方问你想要什么，你说「都行」，问了几次对方就不问了，两个人也越来越少话，饭桌上只剩筷子声。可以试着说：「我说都行，是怕说错，你多问一句我就说得出来。」","work":"在人少、节奏慢、能自己排顺序的地方最稳：上午做一件，下午做一件，中间出门走一圈。要求快、要求当场回应的场合，你会想躲；把时间放宽、要交的写清楚，你能一直做下去。","contrast":"说没什么想法，选馆子纠结半小时。","resonance_moment":"傍晚六点半，风从坡上下来，饭菜的味道跟着过来。","if_you_go":"傍晚去坡上那条路走上去，站到能看见海。","stamp":"风往这边吹","prototype":{"tempo":10,"crowd":5,"grain":8,"age":5}}],"site":{"slug":"city-frequency","accent":"#2f5d62","estimated_minutes":5,"og_image":"{{asset:og-city-frequency}}","mixed_note":["你的答案落在 {A} 和 {B} 之间：两座城都在你身上，只是分量不同。","先按 {A} 读，遇到不像自己的句子，再换成 {B} 读一遍。","两座城的差别，正好落在你最摇摆的那一维上：{A} 是你现在，{B} 是你偶尔想去的。"]}};</script>
+<script>window.__STRINGS = {"buttons":{"start":"开始","next":"下一题","prev":"上一题","see-result":"看结果","retake":"再测一次","share":"分享","copy-link":"复制链接","home":"返回首页","exit":"退出答题","keep-going":"继续答题","tear-stub":"撕下票根","put-back":"放回票根"},"errors":{"load-failed":"出错了，刷新一下再试。","copy-failed":"复制不成，手动选一下地址栏里的地址吧。","incomplete":"还有题没答，答完才能看结果。","no-result":"没找到这次的结果，回去再答一遍。"},"aria":{"loading":"加载中","progress":"已答 {done} 题，共 {total} 题","question":"第 {n} 题，共 {total} 题","option-a":"选项 A","option-b":"选项 B","copied":"链接已复制","result":"结果车票：{title}","scale":"{label}，{value} 分，满分 100","gate-code":"车票号","gate-error":"票号没对上，请再核对一次","gate-submitting":"正在验票","gateway-button":"过闸，查看车票","gateway-passed":"已过闸，正在显示车票","ticket-tear":"票根已撕下"}};</script>
+<script>window.__QUIZ = {"key":"city-frequency","title":"与你同频的城市","subtitle":"24 题，5 分钟，看哪座城市和你用同一种频率过日子。","version":"1.0","scale":{"min":1,"max":5,"labels":["选了 B（另一侧）","—","—","—","选了 A（断言侧）"]},"norm":{"status":"placeholder","note":"尚无真实常模；pct 由每维 6 题二选一线性换算，只有 7 档，T 分与百分位为线性占位，正式投放前需 ≥500 份样本重算"},"disclaimer":"本测试用于自我探索与娱乐，不构成心理诊断，也不能替代专业心理评估。","dimensions":[{"key":"tempo","label":"节奏","high":"疾行","low":"缓行","desc":"一天被切成几块：走路、说话、回消息是不是都带着速度。"},{"key":"crowd","label":"人群距离","high":"人挨人","low":"各过各的","desc":"你和陌生人之间隔多远：热闹是背景音，还是需要躲开的东西。"},{"key":"grain","label":"空间感","high":"横平竖直","low":"自然生长","desc":"街是画好的格子，还是跟着地势和旧墙自己长出来的。"},{"key":"age","label":"时间感","high":"叠着旧时间","low":"铺着新地面","desc":"城市把过去摆在明面上，还是用新的盖过去。"}],"items":[{"id":"t1","dim":"tempo","key":1,"text":"周末约了朋友，出门前你发现时间还早。","option_a":"提前十分钟到，在附近先转一圈。","option_b":"掐着点到，到了正好开始。"},{"id":"t2","dim":"tempo","key":1,"text":"上扶梯的时候，前面的人走得不快。","option_a":"从旁边快步走过去，不想跟着。","option_b":"跟在后面，到顶再说。"},{"id":"t3","dim":"tempo","key":1,"text":"手机响了一声，是条不着急的消息。","option_a":"手头停一下，先把消息回了。","option_b":"放着，等空了再一起回。"},{"id":"t4","dim":"tempo","key":-1,"text":"餐厅要等位，前面还有七八桌。","option_a":"坐在门口慢慢等，不催也不走。","option_b":"站着来回走，时不时问一下还有几桌。"},{"id":"t5","dim":"tempo","key":-1,"text":"一整个周末都没有约，也没有安排。","option_a":"就这么空着，睡到自然醒。","option_b":"临时找点事做，把时间填上。"},{"id":"t6","dim":"tempo","key":-1,"text":"聚会结束，大家准备走了，有人说再坐会儿。","option_a":"那就再坐会儿，不急着走。","option_b":"看下时间，起身收拾东西。"},{"id":"c1","dim":"crowd","key":1,"text":"下班时间，街上人挤人，只能侧着身走。","option_a":"顺着人流走，贴着人也不觉得别扭。","option_b":"绕到边上，找条人少的路走。"},{"id":"c2","dim":"crowd","key":1,"text":"进了一家小馆子，位置还剩几张。","option_a":"坐大堂中间的桌子，人多热闹。","option_b":"挑靠墙的角落，背对着人坐。"},{"id":"c3","dim":"crowd","key":1,"text":"等车的时候，旁边的人跟你搭话。","option_a":"接着聊几句，问问对方去哪。","option_b":"点头应一声，转头看手机。"},{"id":"c4","dim":"crowd","key":-1,"text":"散场的时候，出口挤满了人。","option_a":"在原地站一会儿，等人少了再走。","option_b":"跟着人流往外挤，挤着也不烦。"},{"id":"c5","dim":"crowd","key":-1,"text":"出门前，你大概知道几点路上最挤。","option_a":"错开那个点，宁愿晚一点出门。","option_b":"照常去，挤一点也没什么。"},{"id":"c6","dim":"crowd","key":-1,"text":"同事接了电话，回来脸色不太好。","option_a":"不打听，等他自己想说。","option_b":"问一句怎么了，接着聊两句。"},{"id":"g1","dim":"grain","key":1,"text":"第一次去一个陌生的街区，下地铁就懵了。","option_a":"先打开地图，看清方向再走。","option_b":"先随便走，走错再改。"},{"id":"g2","dim":"grain","key":1,"text":"下班回家，你把钥匙和包放下。","option_a":"挂在门后固定的钩上。","option_b":"哪块台面空就放哪儿。"},{"id":"g3","dim":"grain","key":1,"text":"要办的事情有好几件，一天之内跑完。","option_a":"先列个单子，按顺序一件件来。","option_b":"想到哪件办哪件，走一步看一步。"},{"id":"g4","dim":"grain","key":-1,"text":"路过一条没走过的小巷，里面有家小店。","option_a":"拐进去看看，绕远一点也行。","option_b":"按原路走，赶时间就不进去了。"},{"id":"g5","dim":"grain","key":-1,"text":"和朋友约在一个没去过的路口碰头。","option_a":"凭着感觉往前走，差不多就到。","option_b":"先看清路牌和门牌号再走。"},{"id":"g6","dim":"grain","key":-1,"text":"下午的约临时取消了，多出两个小时。","option_a":"就在附近随便逛，走到哪算哪。","option_b":"重新排一下，先去办计划里的事。"},{"id":"a1","dim":"age","key":1,"text":"路过一栋外墙斑驳的老楼，门口挂着褪色的招牌。","option_a":"停下来多看两眼，想知道它以前是什么。","option_b":"看一眼就走，注意力马上回到手上的事。"},{"id":"a2","dim":"age","key":1,"text":"出门吃饭，你知道附近有家开了很多年的老店。","option_a":"专程走过去，就想在旧桌子边坐坐。","option_b":"附近随便找一家，方便就行。"},{"id":"a3","dim":"age","key":1,"text":"收拾房间，翻出一箱旧东西。","option_a":"挑一挑留下来，装回箱子里。","option_b":"用不上的收拾掉，腾出地方。"},{"id":"a4","dim":"age","key":-1,"text":"街角新开了一家店，装修刚做完。","option_a":"想进去看看，新的总有点意思。","option_b":"还是去常去的那家，习惯了。"},{"id":"a5","dim":"age","key":-1,"text":"用了好几年的东西，突然坏了。","option_a":"直接买个新的，不折腾修。","option_b":"先看看能不能修，修好接着用。"},{"id":"a6","dim":"age","key":-1,"text":"有人跟你讲起多年前这里的样子。","option_a":"听个大概，还是现在的事要紧。","option_b":"追问细节，想知道那时候什么样。"}],"archetypes":[{"key":"shanghai","name":"上海","en":"Shanghai","tagline":"走得快，也留得住旧门牌","city_trait":"弄堂口晾着衣服，拐个弯就是玻璃幕墙；电梯里没人说话，脚步都很急。","portrait":"七点四十，地铁进站，门一开你就迈出去，早饭在哪买、出地铁走哪边都算好了。人再多也不影响你走，顺着人流反而走得顺，被人撞一下也不会回头。包里还有一张折过很多次的收据，是你舍不得扔的小东西，可你不会为它多停一分钟。","strengths":["能在人堆里把事一路办完","把一堆乱事先排成顺序","记住别人不在意的小讲究"],"blind_spots":["没人催的下午，能量容易空转","和自己待一整天，这一格常空着"],"relationship":"约好七点吃饭，对方六点五十说在路上，你已经在楼下站了二十分钟，语气就冷了半度。你真正想说的是：「我不怕等，我怕等到最后只有我一个人在赶。」","work":"最容易出活的是身边有人在走动的地方：节奏快、事情有先后、反馈当场就能给到，你会被推着往前走。全程安静、一个人对着屏幕的半天，反而要花很久才进状态。","contrast":"你说自己不耐烦，可等红灯时只有你在看倒计时。","resonance_moment":"晚上八点半，写字楼玻璃门一开，风灌进来那一下。","if_you_go":"早上七点去菜市场，先站在门口看十分钟再进去。","stamp":"准点到达","prototype":{"tempo":92,"crowd":94,"grain":86,"age":84}},{"key":"shenzhen","name":"深圳","en":"Shenzhen","tagline":"所有路口都朝前，没人问你从哪来","city_trait":"地铁里全是年轻的脸，楼是新的，路是直的；夜里十一点，写字楼还亮着一半。","portrait":"柜子里只留一个箱子，换地方时拎起来就能走，拉链都没怎么拉开过。早上出门时间算得很准，一路都是直路，不用绕。人挤的地方你不烦，反倒觉得有劲。手机里没有几张去年的照片，你更关心下周要做什么、跟谁一起做，别人不打听你的来历，你也乐得不解释。","strengths":["把没做过的事先接下来","在陌生人群里迅速搭上话","把新东西很快变成自己的"],"blind_spots":["回头整理旧事，这一格总是空着","慢下来等一个结果，能量容易散"],"relationship":"对方翻出三年前的聊天记录，你只记得上个月的事，两个人就卡在那儿，谁也没往下说，气氛慢慢凉下来。你可以直接讲：「以前的事改不了了，我更想知道以后怎么过。」","work":"在目标清楚、所有人朝一个方向的地方，你出活最快：会议短、结论快、当天就能动手。反过来，需要反复论证历史原因、照顾各种旧关系的场合，你会耗到没电。","contrast":"手机里没一张旧照片，搬家却留着第一把钥匙。","resonance_moment":"晚上十一点，电梯一层层停，门开时还有人讲方案。","if_you_go":"下午四点去新开的书店，坐二楼靠窗那个位置。","stamp":"从零开始","prototype":{"tempo":96,"crowd":90,"grain":92,"age":8}},{"key":"chongqing","name":"重庆","en":"Chongqing","tagline":"楼上是马路，楼下还是马路","city_trait":"坡和台阶把城市折起来，导航常常失灵；火锅店里说话全靠喊。","portrait":"从一楼进去，出来是七楼，你从来没觉得哪里不对，也不回头数台阶。人多的地方你自在，声音再大也不影响你说自己的事。下雨天台阶打滑，你踩上去也不减速。相册里存着很多「这里以前是什么样」的照片，可你从不停下来细看，边走边拍，拍完就走。","strengths":["在乱的地方找到自己的路","人多时把气氛带起来","把老地方讲出新意思"],"blind_spots":["按部就班整理，能量容易空转","把一件事慢慢说完，这一格常空"],"relationship":"两个人一起出门，你走前面拐了个弯，回头人已经不在了，路上也没再说过话；对方觉得你不管人，你觉得是对方跟不上。可以直说：「我拐弯前喊你一声，你别自己生闷气。」","work":"适合在事情随时会变的地方干活：现场谈、当场改、出了问题马上补。流程写得太细、一步不能动的场合，你会坐不住；给你一块能自己发挥的地，你能顶住一整天的乱。","contrast":"你说自己不怕乱，出门却总要带充电宝。","resonance_moment":"傍晚六点，坡上的喇叭喊着收摊，声音从上往下滚。","if_you_go":"六点上天桥，站着看车拐弯，看十分钟就下来。","stamp":"拐个弯就到","prototype":{"tempo":88,"crowd":92,"grain":10,"age":90}},{"key":"dongguan","name":"东莞","en":"Dongguan","tagline":"没有市中心，每条街都在上班","city_trait":"厂房、出租屋、夜市摊挨着长；路口没有统一的样子，凌晨还有人换班。","portrait":"交接班还有十分钟，你已经把下一班要用的东西摆好，手套也戴上了。街上什么样你不太在乎，能办成事就行。住的地方换过几处，行李一直是一个箱子。路怎么长你就怎么走，不用记住哪条是主街。人多你不觉得吵，那种各忙各的热闹让你踏实。","strengths":["在没人安排时自己开工","和不同来路的人搭上话","把手上的活当天做完"],"blind_spots":["留一件舍不得的东西，常空着","慢下来讲一段过去，能量容易空转"],"relationship":"对方约你周末出去，你说「看排班再说」，两次之后对方就不问了，只在你休息那天发一句在吗。你可以早点讲：「我这周只有半天，剩下半天想睡觉，不是不想见你。」","work":"在事情明确、当天就要结果的地方最顺：接手、干完、交接，中间不用开会。需要长时间筹备、反复打磨细节的活，你会烦；把任务拆成今天能做完的块，你就一直有力气。","contrast":"嘴上说随叫随到，手机常年开着静音。","resonance_moment":"凌晨一点，厂门口的灯还亮着，有人刚换完班走出来。","if_you_go":"早上去街边吃一碗粉，坐着看半小时人流。","stamp":"今天先干完","prototype":{"tempo":92,"crowd":86,"grain":8,"age":12}},{"key":"beijing","name":"北京","en":"Beijing","tagline":"路很宽，人和人之间也很宽","city_trait":"环路一圈圈套着老城，胡同里安静，街上说话客气；走很久才遇见一个人。","portrait":"车厢连接处那小块地方，你一站就是四十分钟，谁也不碰着谁。一天排得很满，通勤那段路反倒像留白。周末你会挑一条没走过的街走到底，走完再决定要不要吃饭。你愿意为一堵旧墙多绕半条街，却不愿为一场饭局多坐一小时。","strengths":["把长线的事情一直推下去","一个人待很久也不掉状态","认出别人忽略的老东西"],"blind_spots":["临时起意的热闹，能量容易空转","被人需要的时刻，这一格常空着"],"relationship":"对方说「你什么事都自己定」，你听着像被指责，可你只是习惯想清楚再开口，也懒得解释，别人就以为你冷淡。可以直接讲：「我想一起去，但我想先知道去哪、几点回。」","work":"适合方向清楚、能长时间不被打断的活：关上门推一整天，晚上把结论摆出来。需要随时响应、总被打断的场合，你耗得很快；给你一段没人找的时间，你能把别人推不动的推完。","contrast":"说饭局太长的你，走的时候还站在门口聊。","resonance_moment":"晚上九点，胡同里自行车铃响一声，又静下来。","if_you_go":"早上去胡同口吃碗豆腐脑，绕着墙根走一圈。","stamp":"慢慢来，别停","prototype":{"tempo":84,"crowd":12,"grain":96,"age":94}},{"key":"hefei","name":"合肥","en":"Hefei","tagline":"新修的路，笔直得有点空","city_trait":"新区路宽车少，绿化带比行人多；写字楼亮到很晚，商场里还挂着招租。","portrait":"下班那趟车整节车厢常只坐你一个，扶手一路都没人握。地铁空、街也空，你反倒走得快。你不太留旧东西，换了地方就把之前那套放下。空着的地方你不慌，正好把手机里攒的事一件件办掉。一天结束得晚，但你从不在路上磨时间。","strengths":["从空地上把事搭起来","一个人推进一整个项目","把习惯在三个月里换掉"],"blind_spots":["跟人慢慢熟起来，能量容易空转","在旧事上多待一待，这一格常空"],"relationship":"对方希望你多讲讲今天怎么样，你觉得没什么可说的，就回一句「还行」；对方越想靠近，你越退半步。可以试着说：「我不是不想讲，是我得有人问得具体一点。」","work":"在有明确目标、协作人数少的地方最有效率：三五个人、一间会议室、当天出结果。人一多、会一长，你就开始看表；把范围缩小、把结论提前定好，你能连着干很久。","contrast":"说没计划的人，日程表已经排到下个月。","resonance_moment":"晚上十点，路灯一盏盏亮过去，车很少，风声清楚。","if_you_go":"傍晚去新区那条主路走一遍，从这头走到那头。","stamp":"一条直线","prototype":{"tempo":86,"crowd":15,"grain":88,"age":10}},{"key":"lanzhou","name":"兰州","en":"Lanzhou","tagline":"城市被拉成一条线，跟着河走","city_trait":"两山夹着一条河，城区顺着河谷铺开；早上吃完面就走，桥下风声很大。","portrait":"口袋里的公交卡磨得发白，边角都软了，你还在用，也没想过换。出城只有那么几个方向，你也习惯沿着一条路一直往前，不拐弯。早上那碗面吃完就走，不坐着聊。你对旧东西有感情，桥、墙、老楼，你都记得它们在哪儿，但也只是路过时多看一眼，看完继续走。","strengths":["沿着一条线把事做到底","一个人赶路不觉得闷","记住一条街的旧样子"],"blind_spots":["停下来和人闲坐，能量容易空转","把心里的事说出口，这一格常空"],"relationship":"对方想晚上一起吃饭慢慢聊，你说「吃完我还得回去」，话很直，对方听着像被推开，饭桌就冷了下来。可以换个说法：「我不是不想聊，我是想早点回去，明天一起吃早饭。」","work":"一条线走到底的活最适合你：接手、埋头、当天出结果，中间不需要人陪。需要频繁碰头、边聊边定的场合，你会想赶紧结束；把目标和期限写清楚交给你，你能一个人推很远。","contrast":"说自己不爱讲话，问路能问三分钟。","resonance_moment":"早上七点，面馆的热气糊住玻璃，勺子碰碗响。","if_you_go":"早上七点半去吃一碗面，加个蛋，十分钟吃完。","stamp":"顺着河走","prototype":{"tempo":82,"crowd":8,"grain":12,"age":78}},{"key":"yinchuan","name":"银川","en":"Yinchuan","tagline":"路很直，天很低，人不多","city_trait":"马路宽得能并排走好几队人，湖和沙都在城边；太阳落得慢，街上安安静静。","portrait":"钥匙、手机、一张卡，兜里就这三样，出门不用回头看一眼。路口等灯的时候，前后常常只有你一个。一天的事排得紧，但从头到尾都是自己一个人办，不用协调谁。太阳落得慢，你也不急着回家。旧的招牌你看见了不会特意记，换了新的，你很快就习惯。","strengths":["在空地方自己安排一整天","把事干得又快又干净","换环境不用缓冲期"],"blind_spots":["跟人深聊到半夜，能量容易空转","为一件事反复回头，这一格常空"],"relationship":"对方发来一长段话，你回了两行就去做别的事，隔了半天才想起没回完，对方以为你在生气。你可以先说清楚：「我没不高兴，我只是话少，你别拿字数猜我。」","work":"人少、路清、目标单一的地方最适合你：早上把一天排好，然后就一直往前推。需要不停商量、协调各方意见的场合，你会烦；把决定权交给你、只留一个结果要交，你的速度很快。","contrast":"嘴上说不合群，聚餐你却先到。","resonance_moment":"傍晚七点，太阳压得很低，湖边的风一阵一阵。","if_you_go":"傍晚沿着那条宽路往城外走，走到看见湖为止。","stamp":"路宽人少","prototype":{"tempo":78,"crowd":5,"grain":10,"age":6}},{"key":"suzhou","name":"苏州","en":"Suzhou","tagline":"慢一点，才走得到园子深处","city_trait":"巷子窄，河在墙根下走；评弹从窗里飘出来，老人坐在门口剥豆子。","portrait":"巷口的石阶被踩得发亮，你每次路过都要在上面站一会儿，才接着往巷子深处走。巷子窄、路是正的，你走进去一般不会走错。你对旧东西有耐心，一张旧桌子、一块旧砖，你能看上半天，看不完也没关系；一天没办几件事，你也不急。","strengths":["在慢里把一件小事做细","人多的地方待一天不累","认出老东西的好处"],"blind_spots":["抢在别人前面出手，能量容易空转","把话说得很直，这一格常空着"],"relationship":"对方说话很冲，你不接，过两天才用一句轻的话提起来，对方以为你早就不在意了，下一次也就不提了。可以直接说：「那天那句话我记住了，我只是不想当场吵。」","work":"在有秩序、节奏不快、有人的地方最舒服：一件事改几遍也不烦，细节一层层抠下来。要当场拍板、一路往前冲的场合，你会卡住；给你时间和安静的角落，你能交出很稳的东西。","contrast":"说自己慢，出门却一回都没迟到。","resonance_moment":"下午三点，评弹从窗户里飘出来，河在墙根下响。","if_you_go":"下午去老巷子里走一条，走到河边就坐下。","stamp":"慢慢走","prototype":{"tempo":10,"crowd":88,"grain":92,"age":96}},{"key":"kunming","name":"昆明","en":"Kunming","tagline":"太阳出来了，事情可以晚点说","city_trait":"街上花比招牌多，茶馆能坐一下午；新楼底下还卖着烧饵块，说话都慢。","portrait":"上午十点，街边的小店才陆续拉开卷帘门，茶壶刚坐上炉子。太阳一出来，很多事都可以推到下午再说。楼是新的、路是直的，你不太在意这里以前是什么样，也不太留旧东西。急事来了你也先坐下再说。别人急你不急，事情最后也都办成了。","strengths":["让紧绷的气氛松下来","在人堆里把事情说圆","不着急也把活干完"],"blind_spots":["把进度往前赶一赶，能量容易空转","为旧事难过一场，这一格常空"],"relationship":"对方问「到底什么时候能定」，你回「快了」，这话说到第三次，对方就不问了，自己先去把事定了。可以具体一点：「我今晚八点前给你答复，没给就打电话催我。」","work":"在节奏松、身边有人的地方最顺手：边晒太阳边把事聊开，人一多你反而思路活。需要卡死时间、全程盯表的场合，你会做得很别扭；把时间放宽、留出聊天余量，你的产出反而稳。","contrast":"说佛系的人，外卖超时就开始看手机。","resonance_moment":"傍晚四点，太阳斜进茶馆，杯子放在桌上轻轻一响。","if_you_go":"下午三点找一家茶馆坐下，点一杯，坐满一小时。","stamp":"慢慢来嘛","prototype":{"tempo":12,"crowd":82,"grain":80,"age":14}},{"key":"chengdu","name":"成都","en":"Chengdu","tagline":"茶泡开了，急事也变慢了","city_trait":"竹椅摆到街边，麻将声从院子里传出来；巷子拐来拐去，屋檐还是旧的。","portrait":"盖碗里的茶续到第三道，你才把手机倒扣回桌上，谁也不催谁。路没有一条是直的，你走熟了就不看导航。坐满的院子、摆到街边的桌子，你觉得那才是正常的声音。旧屋檐、旧门牌你会记得，但不挂在嘴上；一天走不远，话倒说了不少。","strengths":["把一群人拢在一张桌上","在慢里等出一个好结果","记得住旧地方的老样子"],"blind_spots":["把截止日期当真，能量容易空转","一个人待一整天，这一格常空"],"relationship":"对方说好七点到，八点还没来，你也不催，只是把菜先动了；等人坐下，你已经没什么想说的。这句话当时就该讲出来：「我不生气，但你迟到的时候，我会觉得自己不重要。」","work":"在有人的地方、节奏自己定的时候最出活：一张桌子、几个人、边说边做，聊到一半事情就成了。只看进度的场合，你会拖；给你一点松的时间和人，你能把难推的事推起来。","contrast":"嘴上随遇而安，改行程时一句句问清楚。","resonance_moment":"傍晚六点，院子里麻将牌倒下来，哗啦一声。","if_you_go":"下午去巷子里找一家茶馆，坐到天黑再走。","stamp":"坐一会儿","prototype":{"tempo":6,"crowd":90,"grain":14,"age":86}},{"key":"nanning","name":"南宁","en":"Nanning","tagline":"夜里才是一天的开始","city_trait":"电动车流在树下穿，夜市一直摆到半夜；楼是新的，街是弯的。","portrait":"晚上九点，楼下的摊子才刚支起来，你把椅子往外挪了挪。街上人多、车多、声音杂，你不觉得吵，还愿意在人堆里慢慢骑着走。路是弯的，你也习惯拐着走。新的楼、新的店你进去得很快，旧东西不太留，前一天的事也很少再想，也不太回头。","strengths":["把夜晚过成一整天","在热闹里把关系维持住","临时起意也能办成事"],"blind_spots":["早上的事按时办掉，能量容易空转","把旧账翻清楚，这一格常空着"],"relationship":"对方早上发消息，你到晚上才回，对方觉得被晾着，几次之后就不发了。可以提前打个招呼：「我白天基本不看手机，晚上八点以后我都在，有事那时候说。」","work":"天黑之后你反而清醒：晚上开会、夜里改稿、边吃边聊，效率比白天高。上午被按在桌前、要求准点的场合，你很难进状态；把重要的事排到傍晚，你能一口气做完。","contrast":"说自己是夜猫子，闹钟却设了三个。","resonance_moment":"晚上十一点，电动车从树下穿过，铃声一串。","if_you_go":"晚上九点去夜市走一趟，从这头吃到那头。","stamp":"夜里开始","prototype":{"tempo":8,"crowd":84,"grain":6,"age":8}},{"key":"yangzhou","name":"扬州","en":"Yangzhou","tagline":"一条街走完，刚好一壶茶","city_trait":"老城方正，巷子安静；早上喝茶，晚上泡澡，路上人不多，说话都轻。","portrait":"街口那家茶社的椅子一直摆到路边，你走完一条街正好坐下，一壶茶还没凉。路是正的，你走起来心里有数，不用问人。你对旧东西有耐性，老墙、老门、老字，你能站在那儿看很久。一天只办一件事，你也不觉得亏，也不觉得那是浪费。","strengths":["一个人把日子过得很稳","把一件旧事照顾到底","在安静里想清楚再动"],"blind_spots":["被人群推着往前走，能量容易空转","把火气发出来，这一格常空着"],"relationship":"对方嗓门一大，你就不说话了，事后也不太提，对方以为这事过去了，你也当它过去了，谁也不提。可以试着说：「你刚才那样说，我心里过不去，我们坐下来讲清楚。」","work":"一个人、时间长、要求细的活，你坐得住：早上开始，中间不被打断，晚上收工。人多声音杂，你会想退到边上；给你一间安静的屋子、一个清楚的题目，你交出来的东西很干净。","contrast":"说自己喜静，家里的电视一直开着。","resonance_moment":"早上七点，茶馆的门板一块块卸下来，木头碰木头。","if_you_go":"早上七点去老茶馆坐半小时，听旁边人说话。","stamp":"一壶茶的工夫","prototype":{"tempo":12,"crowd":10,"grain":90,"age":92}},{"key":"zhuhai","name":"珠海","en":"Zhuhai","tagline":"海风把马路吹得很空","city_trait":"路宽，树多，海边一条长堤没人抢；九点以后街上就安静了，玻璃楼在暗处亮着。","portrait":"出门不用挑时间，路宽、树多，走上半小时也遇不到几个熟人。天黑之后路上就没什么人了，你正好在那时候出门。一天排两三件事就够，多出来的时间你不打算填，也不觉得浪费。楼是新的、路是直的，你不觉得这里有什么旧事要惦记，也不留旧东西。","strengths":["把日子过得干净利落","一个人待着也不空","在安静里把事做完"],"blind_spots":["被人拉着热闹一场，能量容易空转","为旧事多停一会儿，这一格常空"],"relationship":"对方想天天见面，你觉得一周见两次刚好，谁也没说破，就慢慢淡了，谁也没再提。可以早点讲清楚：「我喜欢你，但我也需要自己待着的时间，这不是在躲你。」","work":"在安静、人少、时间自己排的地方最省力：上午一个人做，下午散个步再回来。需要随时在线、随时被叫的场合，你会想关机；把会议压到最少，你能在同样时间里做完更多。","contrast":"说怕吵，耳机里却一直有人说话。","resonance_moment":"晚上九点，海边堤上没几个人，风把声音吹散。","if_you_go":"傍晚六点去海边长堤走一段，走到灯亮。","stamp":"海风很大","prototype":{"tempo":14,"crowd":6,"grain":86,"age":12}},{"key":"dali","name":"大理","en":"Dali","tagline":"时间在这里不太准","city_trait":"城墙以内是石板路，城外是田和湖；狗在门口睡，店开到几点看心情。","portrait":"十一点才吃早饭，两点吃完午饭，你从来不觉得这有什么不对。路上人不多，你也不急着认识谁，点头就过去了。路是顺着地势长的，你走熟了就不看方向。旧东西你留得多：旧衣服、旧票根、别人不要的桌子，你都觉得还能用，扔了可惜。","strengths":["把慢日子过出内容","一个人待很久不慌","留住别人丢掉的东西"],"blind_spots":["把约定固定下来，能量容易空转","在人群里争一个位置，这一格常空"],"relationship":"对方问「我们以后怎么办」，你说「先这样吧」，对方听着像被拖着，问过一次就不再问，你也没主动说。可以诚实一点：「我现在给不了时间表，但我想和你把这段日子过好。」","work":"在没固定作息、自己定顺序的地方最来劲：想干就一口气干到半夜，不想干就出门走一圈。要求准点打卡、每天一个节奏的场合，你会想逃；给你一个宽松的期限，你反而会提前交。","contrast":"说不在乎时间，约人却总能准时到。","resonance_moment":"傍晚七点，狗在门口翻了个身，石板路上有人拖着鞋走。","if_you_go":"早上去城外的田边坐一会儿，看人下地。","stamp":"看心情","prototype":{"tempo":5,"crowd":8,"grain":5,"age":94}},{"key":"yantai","name":"烟台","en":"Yantai","tagline":"海拐个弯，城就跟着拐","city_trait":"海岸线把城区切得零碎，坡上坡下都是房；风大，街上人少，晚饭吃得早。","portrait":"摊主把秤收起来，冲你摆摆手，你提着空袋子沿着海边慢慢往家走。城顺着海岸拐，你出门常常拐着拐着就到了别处，走到哪儿算哪儿，回来再吃饭。晚饭吃得早，天黑之后就不太出门了。旧的东西你不留，新的地方你也不急着去。","strengths":["在空里把一天填满","一个人守住一件事","换个方向也不慌"],"blind_spots":["主动约一次人，能量容易空转","为一件旧事回头，这一格常空"],"relationship":"对方问你想要什么，你说「都行」，问了几次对方就不问了，两个人也越来越少话，饭桌上只剩筷子声。可以试着说：「我说都行，是怕说错，你多问一句我就说得出来。」","work":"在人少、节奏慢、能自己排顺序的地方最稳：上午做一件，下午做一件，中间出门走一圈。要求快、要求当场回应的场合，你会想躲；把时间放宽、要交的写清楚，你能一直做下去。","contrast":"说没什么想法，选馆子纠结半小时。","resonance_moment":"傍晚六点半，风从坡上下来，饭菜的味道跟着过来。","if_you_go":"傍晚去坡上那条路走上去，站到能看见海。","stamp":"风往这边吹","prototype":{"tempo":10,"crowd":5,"grain":8,"age":5}}],"site":{"slug":"city-frequency","accent":"#2f5d62","estimated_minutes":5,"og_image":"{{asset:og-city-frequency}}","mixed_note":["你的答案落在 {A} 和 {B} 之间：两座城都在你身上，只是分量不同。","先按 {A} 读，遇到不像自己的句子，再换成 {B} 读一遍。","两座城的差别，正好落在你最摇摆的那一维上：{A} 是你现在，{B} 是你偶尔想去的。"]}};</script>
 <script>window.__ATLAS = [{"key":"shanghai","name":"上海","badge":"快城","line":"晾衣杆下面，走过穿西装的人","when":"工作日上午八点，换乘通道里","asset":{"path":"a153f6d45e_shanghai-bund-pudong.jpg","thumb":"a153f6d45e_shanghai-bund-pudong-640.jpg","title":"上海 · 外滩望陆家嘴天际线","primary":"#a0b8c4","tone":"light","license":"CC0","attribution":"摄影：Ermell｜CC0（公有领域/CC0）｜来源：Wikimedia Commons"}},{"key":"shenzhen","name":"深圳","badge":"新城","line":"箱子拉链，到了这儿就没开过","when":"秋天下午四点，书店二楼靠窗","asset":{"path":"ab15116c95_shenzhen-skyline.jpg","thumb":"ab15116c95_shenzhen-skyline-640.jpg","title":"深圳 · 福田高楼群","primary":"#5f93b8","tone":"dark","license":"CC0","attribution":"摄影：Fumikas Sagisavas｜CC0（公有领域/CC0）｜来源：Wikimedia Commons"}},{"key":"chongqing","name":"重庆","badge":"坡城","line":"导航说左转，脚下是台阶","when":"傍晚六点，喇叭喊着收摊","asset":{"path":"f365da25e5_chongqing-hongyadong.jpg","thumb":"f365da25e5_chongqing-hongyadong-640.jpg","title":"重庆 · 洪崖洞夜景","primary":"#68453b","tone":"dark","license":"署名可用","attribution":"摄影：Yumeto｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons"}},{"key":"dongguan","name":"东莞","badge":"轮班","line":"夜市收摊时，早班的人来了","when":"早上换班那半小时，街上最多人","asset":{"path":"9e8a7f2072_dongguan-yulan-theatre.jpg","thumb":"9e8a7f2072_dongguan-yulan-theatre-640.jpg","title":"东莞 · 玉兰大剧院前广场","primary":"#9e9380","tone":"light","license":"署名可用","attribution":"摄影：X-SHLIED｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons"}},{"key":"beijing","name":"北京","badge":"宽城","line":"越宽的街，越适合一个人走","when":"秋天下午，胡同里有人骑车经过","asset":{"path":"0a400e8605_beijing-cbd-jingshan.jpg","thumb":"0a400e8605_beijing-cbd-jingshan-640.jpg","title":"北京 · 景山望 CBD 天际线","primary":"#6e7382","tone":"light","license":"CC0","attribution":"摄影：Gary Todd from Xinzheng, China｜CC0（公有领域/CC0）｜来源：Wikimedia Commons"}},{"key":"hefei","name":"合肥","badge":"直线","line":"商场还挂着招租，路先修好了","when":"晚上十点，新区主路只剩路灯","asset":{"path":"e412776243_hefei-swan-lake.jpg","thumb":"e412776243_hefei-swan-lake-640.jpg","title":"合肥 · 天鹅湖畔天际线","primary":"#89a5c9","tone":"light","license":"署名可用","attribution":"摄影：Kuroiotoko｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons"}},{"key":"lanzhou","name":"兰州","badge":"沿河","line":"桥下风大，面要趁热吃","when":"早上七点，桥下风声最大","asset":{"path":"b4d345f2b4_lanzhou-zhongshan-bridge.jpg","thumb":"b4d345f2b4_lanzhou-zhongshan-bridge-640.jpg","title":"兰州 · 中山桥与黄河","primary":"#bc997e","tone":"light","license":"署名可用","attribution":"摄影：kenner116｜许可：CC BY 2.0｜来源：Wikimedia Commons"}},{"key":"yinchuan","name":"银川","badge":"天低","line":"整条路上，只有你等灯","when":"夏天傍晚，路上遇不到几个人","asset":{"path":"04ce2790a9_yinchuan-jinfeng-skyline.jpg","thumb":"04ce2790a9_yinchuan-jinfeng-skyline-640.jpg","title":"银川 · 金凤区天际线","primary":"#5293d6","tone":"light","license":"署名可用","attribution":"摄影：xiquinhosilva｜许可：CC BY 2.0｜来源：Wikimedia Commons"}},{"key":"suzhou","name":"苏州","badge":"窄巷","line":"巷子窄到，两个人都要让","when":"下雨的下午，河贴着墙根走","asset":{"path":"034e71bd2f_suzhou-jinji-lake.jpg","thumb":"034e71bd2f_suzhou-jinji-lake-640.jpg","title":"苏州 · 金鸡湖畔天际线","primary":"#39392e","tone":"dark","license":"署名可用","attribution":"摄影：King of Hearts｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons"}},{"key":"kunming","name":"昆明","badge":"出太阳","line":"花摆在门口，比招牌显眼","when":"冬天中午，茶馆门口晒得到太阳","asset":{"path":"feef60911e_kunming-skyline-sunset.jpg","thumb":"feef60911e_kunming-skyline-sunset-640.jpg","title":"昆明 · 城市天际线夕照","primary":"#3b444b","tone":"dark","license":"署名可用","attribution":"摄影：FRED｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons"}},{"key":"chengdu","name":"成都","badge":"慢城","line":"急事坐下来，也得等茶泡开","when":"秋天下午三点，院子里刚开局","asset":{"path":"c17d346548_chengdu-skyline-snow.jpg","thumb":"c17d346548_chengdu-skyline-snow-640.jpg","title":"成都 · 雪山下的城市天际线","primary":"#5e8dac","tone":"light","license":"署名可用","attribution":"摄影：FISU｜许可：CC BY 3.0｜来源：Wikimedia Commons"}},{"key":"nanning","name":"南宁","badge":"夜市","line":"天黑了，这条街才开始营业","when":"夏天晚上九点，摊子刚支好","asset":{"path":"d3469cf366_nanning-qingxiu-view.jpg","thumb":"d3469cf366_nanning-qingxiu-view-640.jpg","title":"南宁 · 青秀山望城区","primary":"#909eb1","tone":"light","license":"署名可用","attribution":"摄影：EditQ｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons"}},{"key":"yangzhou","name":"扬州","badge":"早茶","line":"早上一壶茶，能坐掉半个上午","when":"春天早上，老茶馆刚开门","asset":{"path":"a17b11b12c_yangzhou-five-pavilion.jpg","thumb":"a17b11b12c_yangzhou-five-pavilion-640.jpg","title":"扬州 · 瘦西湖五亭桥","primary":"#b0c9f7","tone":"light","license":"署名可用","attribution":"摄影：Gisling｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons"}},{"key":"zhuhai","name":"珠海","badge":"海风","line":"路灯亮起来，堤上就剩风","when":"秋天傍晚六点，长堤上起风","asset":{"path":"13594c9138_zhuhai-fisher-girl.jpg","thumb":"13594c9138_zhuhai-fisher-girl-640.jpg","title":"珠海 · 珠海渔女雕像","primary":"#94a2a7","tone":"light","license":"CC0","attribution":"摄影：Brücke-Osteuropa｜Public domain（公有领域/CC0）｜来源：Wikimedia Commons"}},{"key":"dali","name":"大理","badge":"石板","line":"店门几点开，看当天心情","when":"春天上午十一点，城外田边","asset":{"path":"df4dad097e_dali-three-pagodas.jpg","thumb":"df4dad097e_dali-three-pagodas-640.jpg","title":"大理 · 崇圣寺三塔","primary":"#94b9ec","tone":"light","license":"署名可用","attribution":"摄影：Ngguls｜许可：CC BY-SA 4.0｜来源：Wikimedia Commons"}},{"key":"yantai","name":"烟台","badge":"拐弯","line":"坡上走一趟，能看见海","when":"夏天傍晚六点半，坡上看得见海","asset":{"path":"77b15a5184_yantai-city-view.jpg","thumb":"77b15a5184_yantai-city-view-640.jpg","title":"烟台 · 市区远眺","primary":"#3d3314","tone":"dark","license":"署名可用","attribution":"摄影：Aaron Zhu｜许可：CC BY-SA 3.0｜来源：Wikimedia Commons"}}];</script>
 <script>window.__ATLAS_PLACEHOLDER = "图还在路上";</script>
+<script>window.__TRIVIA = {"hint":"点开一座城，有句你没听过的","items":{"shanghai":"上海的路名是一张中国地图：南北向用省名，东西向用城市名。","shenzhen":"深圳地铁报站要用三种话：普通话、粤语、英语，一站念三遍。","chongqing":"重庆的轻轨从一栋居民楼中间穿过去，楼上照样住着人。","dongguan":"东莞没有区和县，镇上面直接就是市，地址里不写区。","beijing":"北京的街名还留着旧集市：米市、骡马市、菜市口、羊市口。","hefei":"合肥的路名照着安徽地图排：阜阳路在淮河路以北，芜湖路在长江路以南。","lanzhou":"兰州被两边的山夹着，城市只能顺着黄河往两头长。","yinchuan":"唐徕渠从银川城中穿过，黄河水顺着渠流进来，沿岸修成了散步的绿道。","suzhou":"观前街的“观”指玄妙观，这条街从前就叫“玄妙观前”。","kunming":"每年冬天，红嘴鸥从北方飞到滇池过冬，昆明人买鸥粮来喂。","chengdu":"成都的暑袜街，早年真是做夏天薄袜子的一条街。","nanning":"南宁的行道树是扁桃和芒果，果子熟了会掉在人行道上。","yangzhou":"扬州人把喝茶叫“皮包水”，把泡澡叫“水包皮”，两个词正好倒过来。","zhuhai":"珠海的渔女雕像立在香炉湾的礁石上，双手托着一颗珍珠。","dali":"大理的“风花雪月”是四个地方：下关风、上关花、苍山雪、洱海月。","yantai":"烟台的名字来自山上的烽火台，见了敌情就点烟，所以叫烟台。"}};</script>
 <script>
 /* 浏览器端计分内核 —— 逐行等价 psy-studio/engine/core.py::score_likert + match_archetype
  * r ∈ {1,5}；raw = Σ key × (r − 3)；wsum = Σ |key| × (3 − 1)
@@ -1690,12 +1988,23 @@ a:not(.btn):focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
       var second = sims.length > 1 ? sims[1] : null;
       var gap = second ? sims[0].sim - second.sim : sims[0].sim;
       var conf = Math.max(0, Math.min(1, gap / GAP_FULL));
+      // 同频度与 conf 同源：都用这里的 sim 算，页面不再另起一套
+      var simByKey = {};
+      var pctByKey = {};
+      sims.forEach(function (s) {
+        simByKey[s.key] = s.sim;
+        pctByKey[s.key] = pyRound(s.sim * 100, 0);
+      });
       return {
         archetype: sims[0].key,
         top3: sims.slice(0, 3).map(function (s) { return s.key; }),
         dims: dims,
         conf: pyRound(conf, 2),
-        mixed_with: gap < GAP_FULL && second ? second.key : null
+        mixed_with: gap < GAP_FULL && second ? second.key : null,
+        // 全量相似度（按相似度降序）：次优 = sims[1]，最不像 = sims[last]
+        sims: sims.map(function (s) { return { key: s.key, sim: s.sim }; }),
+        sim_pct: pctByKey,
+        sim: simByKey
       };
     }
 
@@ -1796,6 +2105,7 @@ a:not(.btn):focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
     function end() {
       if (done) return;
       done = true;
+      el.classList.remove(cls);   /* 【07i-fix】动画类必须撤：留着会被 fill 钉住并留下横向溢出 */
       clearAnim(el);
     }
     if (el.addEventListener) el.addEventListener('animationend', end, { once: true });
@@ -1873,97 +2183,179 @@ a:not(.btn):focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 
 </script>
 <script>
-/* 首页图鉴：16 张城市卡（图 + badge + line + when），点击展开详情。
- * 缺图的城用 palette.primary 纯色卡 + landing.md 的占位文案，不出现空白或破图。 */
+/* 首页：图鉴弹窗（原生 <dialog>）+ 图鉴提示 + 随滚动跟随的「开始」按钮。
+ * 卡片在构建期就落成 16 个 <button>（无 JS 也能看到图和文字），这里只接管点击。
+ * 弹窗内容全部来自 content/ 与 assets/manifest.json：大图用 path 原图，署名原样渲染。 */
 (function () {
   'use strict';
 
   var UI = window.__UI;
   var ATLAS = window.__ATLAS || [];
-  var ARCH = (window.__QUIZ && window.__QUIZ.archetypes) || [];
-  var PLACEHOLDER = window.__ATLAS_PLACEHOLDER || '';
+  var TRIVIA = window.__TRIVIA || {};
 
-  function archOf(key) {
-    for (var i = 0; i < ARCH.length; i++) if (ARCH[i].key === key) return ARCH[i];
+  var dialog = UI.byId('city-modal');
+  var grid = UI.byId('atlas-grid');
+  var sticky = UI.byId('sticky-cta');
+
+  var opener = null;      // 触发弹窗的那张卡：关闭后焦点回到这里
+  var savedY = 0;         // 打开前的滚动位置
+  var locked = false;
+  var modalOpen = false;
+  var STICKY_AT = 480;    // 滚过 hero（约 480px）才出现
+
+  function byKey(key) {
+    for (var i = 0; i < ATLAS.length; i++) if (ATLAS[i].key === key) return ATLAS[i];
     return null;
   }
 
-  function el(tag, cls, text) {
-    var n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text != null) n.textContent = text;
-    return n;
-  }
+  /* ---------------- 弹窗 ---------------- */
 
-  function p(cls, text) { return el('p', cls, text); }
-
-  function list(items) {
-    var ul = el('ul');
-    (items || []).forEach(function (t) { ul.appendChild(el('li', null, t)); });
-    return ul;
-  }
-
-  function media(entry, asset) {
-    var box = el('div', 'city-card__media');
-    if (asset && asset.thumb) {
-      var img = document.createElement('img');
-      img.src = 'assets/files/' + asset.thumb;
+  function fill(entry) {
+    var asset = entry.asset || {};
+    var img = UI.byId('city-modal-img');
+    var media = UI.byId('city-modal-media');
+    // 大图：manifest 的 path（原图），不是 640 缩略图
+    if (asset.path) {
+      img.src = 'assets/files/' + asset.path;
       img.alt = asset.title || entry.name;
-      img.loading = 'lazy';
-      img.decoding = 'async';
-      img.width = 640;
-      img.height = 480;
-      box.appendChild(img);
+      media.classList.remove('is-placeholder');
     } else {
-      box.classList.add('is-placeholder');
-      if (asset && asset.tone === 'light') box.classList.add('is-tone-light');
-      box.appendChild(el('span', 'city-card__placeholder', PLACEHOLDER));
+      img.removeAttribute('src');
+      img.alt = '';
+      media.classList.add('is-placeholder');
     }
-    return box;
+    UI.byId('city-modal-name').textContent = entry.name;
+    UI.byId('city-modal-badge').textContent = entry.badge;
+    UI.byId('city-modal-line').textContent = entry.line;
+    UI.byId('city-modal-when').textContent = entry.when;
+    UI.byId('city-modal-trivia').textContent = (TRIVIA.items && TRIVIA.items[entry.key]) || '';
+    var credit = UI.byId('city-modal-credit');
+    credit.textContent = asset.attribution || '';
+    credit.hidden = !asset.attribution;
+    if (asset.primary) dialog.style.setProperty('--card-color', asset.primary);
   }
 
-  function createCard(entry, asset) {
-    var arch = archOf(entry.key) || {};
-    var card = document.createElement('details');
-    card.className = 'city-card';
-    card.dataset.city = entry.key;
-    if (asset && asset.primary) card.style.setProperty('--card-color', asset.primary);
+  /* 页面滚动锁定：html 上挂 overflow:hidden，关闭时把滚动位置原样放回去 */
+  function lockScroll() {
+    if (locked) return;
+    locked = true;
+    savedY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    document.documentElement.classList.add('is-modal-locked');
+  }
 
-    var summary = document.createElement('summary');
-    summary.appendChild(media(entry, asset));
+  function unlockScroll() {
+    if (!locked) return;
+    locked = false;
+    document.documentElement.classList.remove('is-modal-locked');
+    window.scrollTo(0, savedY);
+  }
 
-    var body = el('div', 'city-card__body');
-    body.appendChild(el('h3', 'city-card__name', entry.name));
-    body.appendChild(el('span', 'city-card__badge', entry.badge));
-    body.appendChild(p('city-card__line', entry.line));
-    body.appendChild(p('city-card__when', entry.when));
-    summary.appendChild(body);
-    card.appendChild(summary);
-
-    var detail = el('div', 'city-detail');
-    // 与构建期一致：375 只显示 line，badge / when 收进展开面板
-    var meta = el('div', 'city-detail__meta');
-    meta.appendChild(el('span', 'city-card__badge', entry.badge));
-    meta.appendChild(p('city-card__when', entry.when));
-    detail.appendChild(meta);
-    if (arch.tagline) detail.appendChild(p('city-detail__tagline', arch.tagline));
-    if (arch.city_trait) detail.appendChild(p(null, arch.city_trait));
-    if (arch.portrait) detail.appendChild(p(null, arch.portrait));
-    if (arch.strengths) detail.appendChild(list(arch.strengths));
-    if (arch.blind_spots) detail.appendChild(list(arch.blind_spots));
-    if (arch.relationship) detail.appendChild(p(null, arch.relationship));
-    if (arch.work) detail.appendChild(p(null, arch.work));
-    if (arch.contrast) detail.appendChild(el('blockquote', 'city-detail__contrast', arch.contrast));
-    if (arch.resonance_moment) detail.appendChild(p(null, arch.resonance_moment));
-    if (arch.if_you_go) detail.appendChild(p(null, arch.if_you_go));
-    // 与构建期一致：manifest 里带 attribution 的图都要渲染（含 4 条 CC0），原样输出
-    if (asset && asset.attribution) {
-      var credit = p('city-detail__attribution', asset.attribution);
-      credit.setAttribute('data-attribution', '');
-      detail.appendChild(credit);
+  function open(key, trigger) {
+    var entry = byKey(key);
+    if (!entry || !dialog) return false;
+    fill(entry);
+    // 同一张卡重复打开时按下一次算，焦点永远回到最后一次点击的那张
+    opener = trigger || document.querySelector('[data-open-city="' + key + '"]');
+    lockScroll();
+    modalOpen = true;
+    syncSticky(true);
+    if (typeof dialog.showModal === 'function') {
+      if (!dialog.open) dialog.showModal();
+    } else {
+      dialog.setAttribute('open', '');
     }
-    card.appendChild(detail);
-    return card;
+    var closeBtn = UI.byId('city-modal-close');
+    if (closeBtn && closeBtn.focus) closeBtn.focus();
+    return true;
+  }
+
+  function afterClose() {
+    if (!modalOpen) return;
+    modalOpen = false;
+    unlockScroll();
+    var back = opener;
+    opener = null;
+    // preventScroll：焦点回到被点的那张卡，但不能把刚恢复的滚动位置顶走
+    if (back && back.focus) back.focus({ preventScroll: true });
+    syncSticky(true);
+  }
+
+  function close() {
+    if (!dialog || !modalOpen) return;
+    if (dialog.open && typeof dialog.close === 'function') {
+      dialog.close();          // 'close' 事件里做收尾
+    } else {
+      dialog.removeAttribute('open');
+      afterClose();
+    }
+  }
+
+  /* Tab 焦点锁在弹窗内：末尾 Tab 回第一个，首个 Shift+Tab 回最后一个 */
+  function trapTab(e) {
+    if (e.key !== 'Tab') return;
+    var all = dialog.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    var list = [];
+    for (var i = 0; i < all.length; i++) {
+      if (!all[i].disabled && all[i].getClientRects().length) list.push(all[i]);
+    }
+    if (!list.length) return;
+    var first = list[0];
+    var last = list[list.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  function initModal() {
+    if (!dialog) return;
+    dialog.addEventListener('close', afterClose);
+    dialog.addEventListener('keydown', trapTab);
+    // 点遮罩关闭：遮罩上的点击以 dialog 自身为 target（面板覆盖整块内容）
+    dialog.addEventListener('click', function (e) {
+      if (e.target === dialog) close();
+    });
+    var closeBtn = UI.byId('city-modal-close');
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    if (grid) {
+      grid.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest ? e.target.closest('[data-open-city]') : null;
+        if (!btn) return;
+        open(btn.getAttribute('data-open-city'), btn);
+      });
+    }
+  }
+
+  /* ---------------- 随滚动的「开始」 ---------------- */
+
+  function syncSticky(force) {
+    if (!sticky) return;
+    var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var want = y > STICKY_AT && !modalOpen;
+    if (!force && want === sticky.classList.contains('is-on')) return;
+    sticky.classList.toggle('is-on', want);
+    sticky.setAttribute('aria-hidden', want ? 'false' : 'true');
+    if (want) sticky.removeAttribute('tabindex');
+    else sticky.setAttribute('tabindex', '-1');
+  }
+
+  function initSticky() {
+    if (!sticky) return;
+    var ticking = false;
+    window.addEventListener('scroll', function () {
+      if (ticking) return;
+      ticking = true;
+      var run = function () {
+        ticking = false;
+        syncSticky();
+      };
+      if (window.requestAnimationFrame) window.requestAnimationFrame(run);
+      else window.setTimeout(run, 16);
+    }, { passive: true });
+    syncSticky(true);
   }
 
   /* §5.2 #9 首页站台翻牌：每 3s 机械回翻一次读数（不改信息，只重放读数）。
@@ -1985,15 +2377,26 @@ a:not(.btn):focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
   }
 
   function init() {
-    // 图鉴卡在构建期已写成 HTML（无 JS 也能看到 16 张卡），这里只补按钮文案
     UI.applyStaticText();
+    initModal();
+    initSticky();
     initFlaps();
   }
 
-  window.__renderCityCard = createCard;
   window.__atlasCount = function () {
-    var grid = UI.byId('atlas-grid');
     return grid ? grid.querySelectorAll('.city-card').length : 0;
+  };
+  window.__cityModal = {
+    open: function (key) { return open(key, null); },
+    close: close,
+    isOpen: function () { return modalOpen; }
+  };
+  window.__stickyState = function () {
+    return {
+      on: !!(sticky && sticky.classList.contains('is-on')),
+      y: window.pageYOffset || document.documentElement.scrollTop || 0,
+      hidden: !!(sticky && sticky.getAttribute('aria-hidden') === 'true')
+    };
   };
 
   try {
