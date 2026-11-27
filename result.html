@@ -338,6 +338,11 @@ section { min-width: 0; }
   gap: 6px;
   text-align: center;
   min-width: 0;
+  /* 票根自己就是一张纸：CITY-07k 起给它自己的纸色。
+     撕开时票根按 --tear-x 横移 16px/8px，若票根透明（底色只由 .ticket 提供），
+     城市名会跟着横移、跑到纸面以外贴着票纸右边缘 —— 1280 下正好压边、375 下直接贴边。
+     给了纸色后，字和纸一起走，边距永远是票根自己的 6px 内边距。 */
+  background: var(--paper-hi);
   border-radius: 0 var(--radius) var(--radius) 0;
 }
 
@@ -352,10 +357,16 @@ section { min-width: 0; }
 }
 .stub__city {
   max-width: 100%;
-  font-size: 15px;
+  font-size: 20px;       /* CITY-07k：≤2 字撑满；3–4 字 17、≥5 字 14，实际字号由 result.js 按票根实宽兜底 */
   font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: .06em;
+  line-height: 1.15;
+  letter-spacing: .04em;
+  /* 双城名 A×B 只排一行、汉字绝不拆开（不许「兰」/「州」分行） */
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  hyphens: none;
+  text-align: center;
 }
 .stub__seat {
   font-family: var(--font-mono);
@@ -417,7 +428,11 @@ section { min-width: 0; }
 .ticket--back .ticket__main {
   display: flex;
   flex-direction: column;
-  min-height: 420px;   /* §4.2 背面 min-height 420 */
+  /* §4.2 原本的 min-height 420 是为票面上的 3 条维度刻度条留位；
+     CITY-07b2 起刻度条改由雷达卡（票面下方独立卡片）承担，票面里不再有内容撑这一块，
+     420 只会把正文后到印章之间顶出一整块空白（CITY-07k 实测 ~103px）。
+     高度改为跟内容走，印章紧贴正文末尾。 */
+  min-height: 0;
 }
 
 .ticket__head {
@@ -3016,6 +3031,32 @@ html.is-modal-locked body { overflow: hidden; }
 
   /* ---------------- 渲染 ---------------- */
 
+  /* 票根城市名排版（CITY-07k）：既不溢出票根、也不拆词。
+     字号按字数分档（≤2 字 20px、3–4 字 17px、≥5 字 14px），
+     再拿票根的内容宽兜底收缩 —— 换字体、缩窗口、双城 A×B 变长都不会把字挤出去。
+     「只排一行 / 汉字不拆」由 visual.css 的 nowrap + keep-all 负责，这里只管字号。 */
+  function fitStubCity() {
+    var el = UI.byId('stub-city');
+    var stub = el && el.parentElement;
+    if (!el || !stub) return;
+    var text = el.textContent || '';
+    var chars = text.length;
+    var size = chars <= 2 ? 20 : (chars <= 4 ? 17 : 14);
+    var cs = window.getComputedStyle(stub);
+    var avail = stub.clientWidth
+      - (parseFloat(cs.paddingLeft) || 0)
+      - (parseFloat(cs.paddingRight) || 0)
+      - 4;                                  /* 左右各留 2px 余量，别贴边 */
+    el.style.maxWidth = 'none';             /* 量的是文字本身的排版宽，不受 max-width 影响 */
+    el.style.fontSize = size + 'px';
+    var guard = 0;
+    while (size > 9 && el.offsetWidth > avail && guard++ < 40) {
+      size -= 0.5;
+      el.style.fontSize = size + 'px';
+    }
+    el.style.maxWidth = '';
+  }
+
   function render(enc) {
     var noResult = UI.byId('no-result');
     var shell = UI.byId('result-shell');
@@ -3047,6 +3088,7 @@ html.is-modal-locked body { overflow: hidden; }
     UI.byId('ticket-trait').textContent = a.city_trait;
     UI.byId('ticket-stamp').textContent = isMixed ? mixed.transit_stamp : a.stamp;
     UI.byId('stub-city').textContent = isMixed ? a.name + '×' + b.name : a.name;
+    fitStubCity();
 
     // 标题：单城 / 联程 两个模板二选一（模板原文来自 content/site/result.md）
     setBranch('head-single', !isMixed);
@@ -3206,6 +3248,12 @@ html.is-modal-locked body { overflow: hidden; }
   window.__renderResult = render;
   window.__currentResult = function () { return current; };
   window.__resultMotion = trace;
+  window.__fitStubCity = fitStubCity;
+  // 窗口宽度变了票根也变窄（375 档 82px），字号要重新兜底
+  window.addEventListener('resize', fitStubCity);
+  if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+    document.fonts.ready.then(fitStubCity);
+  }
   // 采样钩子：票根出现的动画对象（startTime / currentTime / playState 一目了然）
   window.__paperAnims = function () {
     return ticketAnims(UI.byId('ticket'), null).map(function (a) {

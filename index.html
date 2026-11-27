@@ -338,6 +338,11 @@ section { min-width: 0; }
   gap: 6px;
   text-align: center;
   min-width: 0;
+  /* 票根自己就是一张纸：CITY-07k 起给它自己的纸色。
+     撕开时票根按 --tear-x 横移 16px/8px，若票根透明（底色只由 .ticket 提供），
+     城市名会跟着横移、跑到纸面以外贴着票纸右边缘 —— 1280 下正好压边、375 下直接贴边。
+     给了纸色后，字和纸一起走，边距永远是票根自己的 6px 内边距。 */
+  background: var(--paper-hi);
   border-radius: 0 var(--radius) var(--radius) 0;
 }
 
@@ -352,10 +357,16 @@ section { min-width: 0; }
 }
 .stub__city {
   max-width: 100%;
-  font-size: 15px;
+  font-size: 20px;       /* CITY-07k：≤2 字撑满；3–4 字 17、≥5 字 14，实际字号由 result.js 按票根实宽兜底 */
   font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: .06em;
+  line-height: 1.15;
+  letter-spacing: .04em;
+  /* 双城名 A×B 只排一行、汉字绝不拆开（不许「兰」/「州」分行） */
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  hyphens: none;
+  text-align: center;
 }
 .stub__seat {
   font-family: var(--font-mono);
@@ -417,7 +428,11 @@ section { min-width: 0; }
 .ticket--back .ticket__main {
   display: flex;
   flex-direction: column;
-  min-height: 420px;   /* §4.2 背面 min-height 420 */
+  /* §4.2 原本的 min-height 420 是为票面上的 3 条维度刻度条留位；
+     CITY-07b2 起刻度条改由雷达卡（票面下方独立卡片）承担，票面里不再有内容撑这一块，
+     420 只会把正文后到印章之间顶出一整块空白（CITY-07k 实测 ~103px）。
+     高度改为跟内容走，印章紧贴正文末尾。 */
+  min-height: 0;
 }
 
 .ticket__head {
